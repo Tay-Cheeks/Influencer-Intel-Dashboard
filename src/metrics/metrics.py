@@ -47,7 +47,7 @@ class InfluencerMetrics:
         #Engagement consistency (std dev of engagement rates per video)
         per_video_engagement = [
             (vid["likes"] + vid["comments"]) / vid["views"] * 100 if vid["views"] else 0
-            for v in self.video_data
+            for vid in self.video_data
         ]
         engagement_consistency = round(statistics.stdev(per_video_engagement), 2) if len(per_video_engagement) > 1 else 0
 
