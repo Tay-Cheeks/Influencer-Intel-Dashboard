@@ -8,4 +8,4 @@ numpy
 altair
 matplotlib
 isodate
-
+matplotlib
