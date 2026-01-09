@@ -11,6 +11,8 @@ from src.analysis.analyser import get_creator_tier
 theme = st.sidebar.radio("Theme", ["Light", "Dark"])
 if theme == "Dark":
     alt.themes.enable("dark")
+else:
+    alt.themes.enable("light")
 
 st.set_page_config(page_title="Influencer Intel Dashboard", layout="wide")
 
@@ -46,13 +48,70 @@ if run and creator_url:
     c3.metric("Median Views", f"{report['median_views']:,}")
     c4.metric("Dashboard Score", metrics.dashboard_score, metrics.dashboard_interpretation)
 
+    # ---------------- DASHBOARD SCORE EXPLANATION ------------
+    with st.expander("What is the Dashboard Score?"):
+        st.markdown(
+            """
+            **Dashboard Score (0–100)** is a composite performance index designed to give a 
+            quick, decision-ready view of a creator’s overall quality.
+
+            It combines:
+            • Engagement rate vs industry benchmarks  
+            • Audience loyalty (views-to-subscriber ratio)  
+            • Engagement consistency (volatility control)  
+            • Content risk profile (viral vs stable performance)
+
+            **Higher scores indicate creators who are more reliable, brand-safe, and commercially scalable.**
+            """
+        )
+
+
     # ---------------- DATA ----------------
     df = pd.DataFrame(videos)
     df["published_date"] = pd.to_datetime(df["publishedAt"])
     df["engagement"] = df["likes"] + df["comments"]
 
+    # ---------------- AVRG vs MEDIAN VIEWS & VOLATILITY ----------------
+    st.subheader("View Performance Summary")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "Average Views",
+        f"{report['mean_views']:,}",
+        help="Average views across recent uploads. Can be inflated by viral videos."
+    )
+
+    col2.metric(
+        "Median Views",
+        f"{report['median_views']:,}",
+        help="Typical views per video. More reliable indicator of baseline performance."
+    )
+
+    col3.metric(
+        "Volatility & Risk",
+        report["risk_level"],
+        help=f"Volatility Ratio: {report['volatility_ratio']} (Higher = less predictable)"
+    )
+
+    st.caption(
+        """
+        A large gap between average and median views indicates volatility. 
+        Brands prefer creators with strong median performance and low volatility.
+        """
+    )
+
+
     # ---------------- PERFORMANCE CHART ----------------
     st.subheader("Performance & Velocity")
+    st.caption(
+        """
+        This section evaluates how consistently the creator performs over time 
+        and whether recent content is gaining momentum. 
+        It helps identify if performance is stable, declining, or driven by short-term spikes.
+        """
+    )
+
     perf_chart = (
         alt.Chart(df)
         .mark_line(point=True)
@@ -73,52 +132,164 @@ if run and creator_url:
         """
     )
 
+    # ---------------- VIDEO VIEWS CHART ---------------------
+    st.subheader("Views per Recent Video")
+
+    views_chart = (
+        alt.Chart(df)
+        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .encode(
+            x=alt.X("title:N", sort="-y", title="Video"),
+            y=alt.Y("views:Q", title="Views"),
+            tooltip=[
+                alt.Tooltip("title:N", title="Video"),
+                alt.Tooltip("views:Q", title="Views"),
+                alt.Tooltip("published_date:T", title="Published")
+            ]
+        )
+        .properties(height=350)
+        .interactive()
+    )
+
+    st.altair_chart(views_chart, use_container_width=True)
+
+    st.caption("Hover over bars to see detailed performance per video.")
+
+
+    # ---------------- LIKES vs COMMENTS CHART ---------------
+    st.subheader("Engagement Breakdown")
+
+    eng_df = df.melt(
+        id_vars=["title", "published_date"],
+        value_vars=["likes", "comments"],
+        var_name="Engagement Type",
+        value_name="Count"
+    )
+
+    eng_chart = (
+        alt.Chart(eng_df)
+        .mark_bar()
+        .encode(
+            x=alt.X("title:N", title="Video"),
+            y=alt.Y("Count:Q", title="Engagement"),
+            color=alt.Color("Engagement Type:N"),
+            tooltip=[
+                "Engagement Type",
+                "Count",
+                alt.Tooltip("published_date:T", title="Published")
+            ]
+        )
+        .properties(height=350)
+        .interactive()
+    )
+
+    st.altair_chart(eng_chart, use_container_width=True)
+
+    st.caption("Balanced comment-to-like ratios typically indicate healthier engagement.")
+
+
     # ---------------- SHORT vs LONG ANALYSIS ----------------
     st.subheader("Short vs Long Content Mix")
 
     sl = report["short_long_split"]
+
     sl_df = pd.DataFrame({
-        "Format": ["Short-form", "Long-form"],
-        "Count": [sl["short_count"], sl["long_count"]],
-        "Avg Views": [sl["short_avg_views"], sl["long_avg_views"]],
+        "Format": ["Short-form (<7 min)", "Long-form (≥7 min)"],
+        "Count": [sl["short_count"], sl["long_count"]]
     })
 
-    st.altair_chart(
+    pie_chart = (
         alt.Chart(sl_df)
-        .mark_bar()
+        .mark_arc(innerRadius=40)
         .encode(
-            x="Format:N",
-            y="Count:Q",
-            color="Format:N",
-            tooltip=["Count", "Avg Views"]
-        ),
-        use_container_width=True
+            theta=alt.Theta("Count:Q"),
+            color=alt.Color("Format:N", legend=alt.Legend(title="Content Type")),
+            tooltip=["Format", "Count"]
+        )
+        .properties(height=300)
     )
 
-    conclusion = (
-        "Short-form dominates reach but long-form drives depth."
-        if sl["short_count"] > sl["long_count"]
-        else "Long-form content drives sustained audience value."
+    st.altair_chart(pie_chart, use_container_width=True)
+
+    st.caption(
+        f"""
+        Short-form accounts for **{sl['short_percent']}%** of recent content.
+        Short-form typically boosts reach, while long-form drives depth and retention.
+        """
     )
 
-    st.caption(conclusion)
+    # st.subheader("Short vs Long Content Mix")
+
+    # sl = report["short_long_split"]
+    # sl_df = pd.DataFrame({
+    #     "Format": ["Short-form", "Long-form"],
+    #     "Count": [sl["short_count"], sl["long_count"]],
+    #     "Avg Views": [sl["short_avg_views"], sl["long_avg_views"]],
+    # })
+
+    # st.altair_chart(
+    #     alt.Chart(sl_df)
+    #     .mark_bar()
+    #     .encode(
+    #         x="Format:N",
+    #         y="Count:Q",
+    #         color="Format:N",
+    #         tooltip=["Count", "Avg Views"]
+    #     ),
+    #     use_container_width=True
+    # )
+
+    # conclusion = (
+    #     "Short-form dominates reach but long-form drives depth."
+    #     if sl["short_count"] > sl["long_count"]
+    #     else "Long-form content drives sustained audience value."
+    # )
+
+    # st.caption(conclusion)
 
     # ---------------- MONETISATION ----------------
     st.subheader("Monetisation Metrics")
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("CPM", metrics.calculate_CPM(client_cost))
-    col2.metric("CPV", metrics.calculate_CPV(client_cost))
-    col3.metric("CPE", metrics.calculate_CPE(client_cost))
-    col4.metric("Engagement-Adj CPM", metrics.calculate_engagement_adjusted_CPM(client_cost))
-
-    st.caption(
-        """
-        • **CPM Benchmark:** R30–R60  
-        • **Low CPV:** Efficient reach  
-        • **Low CPE:** High engagement quality
+    st.markdown("### CPM — Cost Per 1,000 Views")
+    st.write(
+        f"""
+        **Result:** {metrics.calculate_CPM(client_cost)}  
+        Measures cost efficiency of reach. Lower CPM = better value for brands.
         """
     )
+
+    st.markdown("### CPV — Cost Per View")
+    st.write(
+        f"""
+        **Result:** {metrics.calculate_CPV(client_cost)}  
+        Shows how much each individual view costs. Useful for awareness campaigns.
+        """
+    )
+
+    st.markdown("### CPE — Cost Per Engagement")
+    st.write(
+        f"""
+        **Result:** {metrics.calculate_CPE(client_cost)}  
+        Indicates engagement efficiency. Lower CPE suggests stronger audience interaction.
+        """
+    )
+
+    st.markdown("### Engagement-Adjusted CPM")
+    st.write(
+        f"""
+        **Result:** {metrics.calculate_engagement_adjusted_CPM(client_cost)}  
+        Adjusts CPM based on engagement quality — rewards creators with active audiences.
+        """
+    )
+
+    st.markdown("### Talent Cost (After Agency Margin)")
+    st.write(
+        f"""
+        **Result:** {metrics.calculate_talent_cost(client_cost, agency_margin):,.2f}  
+        Net payout to creator after agency margin.
+        """
+    )
+
 
     # ---------------- CSV EXPORT ----------------
     st.subheader("Export Report")
