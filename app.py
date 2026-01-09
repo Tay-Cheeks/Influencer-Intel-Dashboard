@@ -2,11 +2,9 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
-import isodate
 
 from src.youtube.client import get_channel_stats, get_recent_videos
 from src.metrics.metrics import InfluencerMetrics
-from src.analysis.analyser import build_analysis
 
 # ---------------- STREAMLIT CONFIG ----------------
 st.set_page_config(
@@ -20,29 +18,16 @@ st.caption("Data-driven influencer performance, engagement & monetisation analys
 # ---------------- SIDEBAR INPUTS ----------------
 with st.sidebar:
     st.header("Channel Input")
-    creator_url = st.text_input(
-        "YouTube Channel URL or Handle",
-        placeholder="https://youtube.com/@creator"
-    )
+    creator_url = st.text_input("YouTube Channel URL or Handle", placeholder="https://youtube.com/@creator")
 
     st.divider()
     st.header("Campaign Inputs")
-    client_cost = st.number_input(
-        "Client Cost",
-        min_value=0.0,
-        step=100.0
-    )
-    agency_margin = st.slider(
-        "Agency Margin (%)",
-        min_value=0,
-        max_value=50,
-        value=20
-    )
+    client_cost = st.number_input("Client Cost", min_value=0.0, step=100.0)
+    agency_margin = st.slider("Agency Margin (%)", min_value=0, max_value=50, value=20)
     run_btn = st.button("Run Analysis", type="primary")
 
 # ---------------- MAIN LOGIC ----------------
 if run_btn and creator_url:
-
     with st.spinner("Fetching YouTube data..."):
         channel = get_channel_stats(creator_url)
         if not channel:
@@ -62,102 +47,74 @@ if run_btn and creator_url:
     )
 
     report = metrics.get_performance_report()
-    analysis = build_analysis(metrics)
     talent_cost = metrics.calculate_talent_cost(client_cost, agency_margin)
 
     # ---------------- TOP SUMMARY ----------------
     st.subheader(channel["channel_name"])
-    overview = analysis.get("overview", {})
-    dashboard_score = overview.get("dashboard_score", "N/A")
-    performance_label = overview.get("performance_label", "Unavailable")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Subscribers", f"{channel['subscribers']:,}")
-    col2.metric("Average Views (8 videos)", f"{report.get('mean_views',0):,}")
-    col3.metric("Median Views", f"{report.get('median_views',0):,}")
-    col4.metric("Dashboard Score", dashboard_score, performance_label)
+    col2.metric("Average Views (8 videos)", f"{report['mean_views']:,}")
+    col3.metric("Median Views", f"{report['median_views']:,}")
+    col4.metric("Dashboard Score", metrics.dashboard_score, metrics.dashboard_interpretation)
 
     # ---------------- DATAFRAME ----------------
     df = pd.DataFrame(videos)
-    required_cols = {"title", "publishedAt", "views", "likes", "comments", "duration"}
-    if not required_cols.issubset(df.columns):
-        st.error("Video data missing required fields.")
-        st.stop()
-
     df["published_date"] = pd.to_datetime(df["publishedAt"])
     df["label"] = df["title"] + " (" + df["published_date"].dt.strftime("%Y-%m-%d") + ")"
-    df["engagement_percent"] = ((df["likes"] + df["comments"]) / df["views"]) * 100
 
     # ---------------- VIEWS BAR CHART ----------------
     st.subheader("Views per Recent Video")
     views_chart = (
         alt.Chart(df)
-        .mark_bar(color="#1f77b4")
+        .mark_bar()
         .encode(
             x=alt.X("label:N", sort="-y", title="Video"),
             y=alt.Y("views:Q", title="Views"),
-            tooltip=[
-                alt.Tooltip("title:N", title="Title"),
-                alt.Tooltip("published_date:T", title="Published"),
-                alt.Tooltip("views:Q", title="Views"),
-                alt.Tooltip("likes:Q", title="Likes"),
-                alt.Tooltip("comments:Q", title="Comments")
-            ]
+            tooltip=["title", "views", alt.Tooltip("published_date:T", title="Date")]
         )
         .properties(height=350)
     )
-    st.altair_chart(views_chart.interactive(), use_container_width=True)
-    st.caption(
-        "This chart shows views for the creator’s most recent 8 uploads. "
-        "Average and median views are calculated from this same dataset."
-    )
-    st.divider()
+    st.altair_chart(views_chart, use_container_width=True)
 
-    # ---------------- ENGAGEMENT BREAKDOWN ----------------
-    st.subheader("Engagement per Video (%)")
+    st.caption("This chart shows views for the creator’s most recent 8 uploads.")
+
+    # ---------------- ENGAGEMENT CHART ----------------
+    st.subheader("Engagement Breakdown")
     engagement_df = df.melt(
-        id_vars=["label", "published_date", "title"],
+        id_vars=["label"],
         value_vars=["likes", "comments"],
         var_name="Type",
         value_name="Count"
     )
+
     engagement_chart = (
         alt.Chart(engagement_df)
         .mark_bar()
         .encode(
             x=alt.X("label:N", title="Video"),
-            y=alt.Y("Count:Q"),
+            y=alt.Y("Count:Q", title="Engagement"),
             color="Type:N",
-            tooltip=[
-                alt.Tooltip("title:N", title="Title"),
-                alt.Tooltip("published_date:T", title="Published"),
-                alt.Tooltip("Type:N", title="Type"),
-                alt.Tooltip("Count:Q", title="Count")
-            ]
+            order=alt.Order(
+                'Type',
+                sort='ascending'  # comments below likes
+            ),
+            tooltip=["label", "Type", "Count", alt.Tooltip("published_date:T", title="Date")]
         )
         .properties(height=350)
     )
-    st.altair_chart(engagement_chart.interactive(), use_container_width=True)
+    st.altair_chart(engagement_chart, use_container_width=True)
 
-    # Comments vs Likes explanation
-    c2l_ratio = (report.get("comment_rate_percent", 0) / max(report.get("like_rate_percent", 1), 1))
-    if c2l_ratio > 0.1:
-        ratio_desc = "High comment-to-like ratio → audience is highly engaged in discussions."
-    elif c2l_ratio < 0.02:
-        ratio_desc = "Very low comment-to-like ratio → mostly passive engagement."
-    else:
-        ratio_desc = "Moderate comment-to-like ratio → normal engagement patterns."
-    st.caption(f"Likes and comments per video help assess engagement quality. {ratio_desc}")
-    st.divider()
+    st.caption(
+        "Likes and comments per video. Moderate comment-to-like ratio → normal engagement."
+    )
 
     # ---------------- SHORTS VS LONG FORM ----------------
     st.subheader("Content Format Mix")
     sl_df = pd.DataFrame({
         "Format": ["Short-form (<7 min)", "Long-form (≥7 min)"],
-        "Count": [
-            sum(1 for v in videos if isodate.parse_duration(v["duration"]).total_seconds() < 420),
-            sum(1 for v in videos if isodate.parse_duration(v["duration"]).total_seconds() >= 420)
-        ]
+        "Count": [report["short_long_split"]["short_form"], report["short_long_split"]["long_form"]]
     })
+
     format_chart = (
         alt.Chart(sl_df)
         .mark_arc()
@@ -169,41 +126,20 @@ if run_btn and creator_url:
         .properties(height=300)
     )
     st.altair_chart(format_chart, use_container_width=True)
-    st.caption("A heavy short-form skew may inflate views but reduce depth and conversion.")
-    st.divider()
+
+    st.caption("Short-form skew may inflate views but reduce depth.")
 
     # ---------------- PERFORMANCE ANALYSIS ----------------
     st.subheader("Performance Analysis")
-    dist = analysis.get("distribution_analysis", {})
-    eng = analysis.get("engagement_analysis", {})
-    aud = analysis.get("audience_quality", {})
-    risk = analysis.get("risk_assessment", {})
+    dist = report.get("distribution_analysis", {})
+    eng = report.get("engagement_analysis", {})
+    aud = report.get("audience_quality", {})
+    risk = report.get("risk_assessment", {})
 
-    st.markdown(
-        f"""
-        **View Distribution:** {dist.get('distribution_type','N/A')}  
-        {dist.get('explanation','')}
-        """
-    )
-    st.markdown(
-        f"""
-        **Engagement Rate:** {eng.get('engagement_rate_percent',0)}%  
-        Reflects how actively viewers interact relative to total views.  
-        """
-    )
-    st.markdown(
-        f"""
-        **Audience Loyalty:** {aud.get('loyalty_percent',0)}%  
-        Indicates how much of the subscriber base watches new uploads.
-        """
-    )
-    st.markdown(
-        f"""
-        **Risk Level:** {risk.get('risk_level','N/A')}  
-        Based on volatility and reliance on viral spikes.
-        """
-    )
-    st.divider()
+    st.markdown(f"**View Distribution:** {dist.get('distribution_type', 'N/A')}  \n{dist.get('explanation','')}")
+    st.markdown(f"**Engagement Rate:** {eng.get('engagement_rate_percent',0)}%  \nComment-to-Like Ratio: {eng.get('comment_to_like_ratio',0)}")
+    st.markdown(f"**Audience Loyalty:** {aud.get('loyalty_percent',0)}%")
+    st.markdown(f"**Risk Level:** {risk.get('risk_level','N/A')}")
 
     # ---------------- MONETISATION ----------------
     st.subheader("Monetisation Metrics")
@@ -212,21 +148,11 @@ if run_btn and creator_url:
     col2.metric("Talent Cost", f"{talent_cost:,.2f}")
     col3.metric("CPM", metrics.calculate_CPM(client_cost))
     col4.metric("Engagement-Adjusted CPM", metrics.calculate_engagement_adjusted_CPM(client_cost))
-    st.caption("Engagement-adjusted CPM discounts inflated reach and rewards genuine interaction.")
-    st.divider()
 
     # ---------------- AI SUMMARY ----------------
     with st.expander("AI Performance Summary"):
         ai = metrics.get_ai_analysis()
         st.write(ai.get("summary", "AI analysis unavailable."))
-
-    # ---------------- EXPORT REPORT ----------------
-    st.subheader("Export Dashboard Report")
-    export_df = df.copy()
-    export_df["engagement_percent"] = df["engagement_percent"]
-    if st.button("Download CSV Report"):
-        export_df.to_csv("youtube_dashboard_report.csv", index=False)
-        st.success("CSV report saved as youtube_dashboard_report.csv")
 
 else:
     st.info("Enter a YouTube channel and campaign details to begin.")
@@ -238,6 +164,7 @@ else:
 # import pandas as pd
 # import altair as alt
 # from datetime import datetime
+# import isodate
 
 # from src.youtube.client import get_channel_stats, get_recent_videos
 # from src.metrics.metrics import InfluencerMetrics
@@ -255,7 +182,6 @@ else:
 # # ---------------- SIDEBAR INPUTS ----------------
 # with st.sidebar:
 #     st.header("Channel Input")
-
 #     creator_url = st.text_input(
 #         "YouTube Channel URL or Handle",
 #         placeholder="https://youtube.com/@creator"
@@ -263,20 +189,17 @@ else:
 
 #     st.divider()
 #     st.header("Campaign Inputs")
-
 #     client_cost = st.number_input(
 #         "Client Cost",
 #         min_value=0.0,
 #         step=100.0
 #     )
-
 #     agency_margin = st.slider(
 #         "Agency Margin (%)",
 #         min_value=0,
 #         max_value=50,
 #         value=20
 #     )
-
 #     run_btn = st.button("Run Analysis", type="primary")
 
 # # ---------------- MAIN LOGIC ----------------
@@ -284,13 +207,11 @@ else:
 
 #     with st.spinner("Fetching YouTube data..."):
 #         channel = get_channel_stats(creator_url)
-
 #         if not channel:
 #             st.error("Could not fetch channel data.")
 #             st.stop()
 
 #         videos = get_recent_videos(channel["uploads_playlist_id"], count=8)
-
 #         if not videos:
 #             st.error("No recent videos found.")
 #             st.stop()
@@ -304,33 +225,21 @@ else:
 
 #     report = metrics.get_performance_report()
 #     analysis = build_analysis(metrics)
-
 #     talent_cost = metrics.calculate_talent_cost(client_cost, agency_margin)
 
 #     # ---------------- TOP SUMMARY ----------------
 #     st.subheader(channel["channel_name"])
-
 #     overview = analysis.get("overview", {})
-
 #     dashboard_score = overview.get("dashboard_score", "N/A")
 #     performance_label = overview.get("performance_label", "Unavailable")
-
 #     col1, col2, col3, col4 = st.columns(4)
-
 #     col1.metric("Subscribers", f"{channel['subscribers']:,}")
-#     col2.metric("Average Views (8 videos)", f"{report['mean_views']:,}")
-#     col3.metric("Median Views", f"{report['median_views']:,}")
-#     col4.metric(
-#         "Dashboard Score",
-#         dashboard_score,
-#         performance_label
-#     )
-
+#     col2.metric("Average Views (8 videos)", f"{report.get('mean_views',0):,}")
+#     col3.metric("Median Views", f"{report.get('median_views',0):,}")
+#     col4.metric("Dashboard Score", dashboard_score, performance_label)
 
 #     # ---------------- DATAFRAME ----------------
 #     df = pd.DataFrame(videos)
-
-#     # Defensive guards
 #     required_cols = {"title", "publishedAt", "views", "likes", "comments", "duration"}
 #     if not required_cols.issubset(df.columns):
 #         st.error("Video data missing required fields.")
@@ -338,40 +247,41 @@ else:
 
 #     df["published_date"] = pd.to_datetime(df["publishedAt"])
 #     df["label"] = df["title"] + " (" + df["published_date"].dt.strftime("%Y-%m-%d") + ")"
+#     df["engagement_percent"] = ((df["likes"] + df["comments"]) / df["views"]) * 100
 
-#     # ---------------- VIEWS BAR CHART (ALTAIR) ----------------
+#     # ---------------- VIEWS BAR CHART ----------------
 #     st.subheader("Views per Recent Video")
-
 #     views_chart = (
 #         alt.Chart(df)
-#         .mark_bar()
+#         .mark_bar(color="#1f77b4")
 #         .encode(
 #             x=alt.X("label:N", sort="-y", title="Video"),
 #             y=alt.Y("views:Q", title="Views"),
-#             tooltip=["title", "views"]
+#             tooltip=[
+#                 alt.Tooltip("title:N", title="Title"),
+#                 alt.Tooltip("published_date:T", title="Published"),
+#                 alt.Tooltip("views:Q", title="Views"),
+#                 alt.Tooltip("likes:Q", title="Likes"),
+#                 alt.Tooltip("comments:Q", title="Comments")
+#             ]
 #         )
 #         .properties(height=350)
 #     )
-
-#     st.altair_chart(views_chart, use_container_width=True)
-
+#     st.altair_chart(views_chart.interactive(), use_container_width=True)
 #     st.caption(
 #         "This chart shows views for the creator’s most recent 8 uploads. "
 #         "Average and median views are calculated from this same dataset."
 #     )
-
 #     st.divider()
 
-#     # ---------------- ENGAGEMENT CHART ----------------
-#     st.subheader("Engagement Breakdown")
-
+#     # ---------------- ENGAGEMENT BREAKDOWN ----------------
+#     st.subheader("Engagement per Video (%)")
 #     engagement_df = df.melt(
-#         id_vars=["label"],
+#         id_vars=["label", "published_date", "title"],
 #         value_vars=["likes", "comments"],
 #         var_name="Type",
 #         value_name="Count"
 #     )
-
 #     engagement_chart = (
 #         alt.Chart(engagement_df)
 #         .mark_bar()
@@ -379,28 +289,37 @@ else:
 #             x=alt.X("label:N", title="Video"),
 #             y=alt.Y("Count:Q"),
 #             color="Type:N",
-#             tooltip=["Type", "Count"]
+#             tooltip=[
+#                 alt.Tooltip("title:N", title="Title"),
+#                 alt.Tooltip("published_date:T", title="Published"),
+#                 alt.Tooltip("Type:N", title="Type"),
+#                 alt.Tooltip("Count:Q", title="Count")
+#             ]
 #         )
 #         .properties(height=350)
 #     )
+#     st.altair_chart(engagement_chart.interactive(), use_container_width=True)
 
-#     st.altair_chart(engagement_chart, use_container_width=True)
-
-#     st.caption(
-#         "Likes and comments per video help assess engagement quality, not just reach."
-#     )
-
+#     # Comments vs Likes explanation
+#     c2l_ratio = (report.get("comment_rate_percent", 0) / max(report.get("like_rate_percent", 1), 1))
+#     if c2l_ratio > 0.1:
+#         ratio_desc = "High comment-to-like ratio → audience is highly engaged in discussions."
+#     elif c2l_ratio < 0.02:
+#         ratio_desc = "Very low comment-to-like ratio → mostly passive engagement."
+#     else:
+#         ratio_desc = "Moderate comment-to-like ratio → normal engagement patterns."
+#     st.caption(f"Likes and comments per video help assess engagement quality. {ratio_desc}")
 #     st.divider()
 
 #     # ---------------- SHORTS VS LONG FORM ----------------
 #     st.subheader("Content Format Mix")
-
-#     sl = report["short_long_split"]
 #     sl_df = pd.DataFrame({
-#         "Format": ["Short-form", "Long-form"],
-#         "Count": [sl["short_form"], sl["long_form"]]
+#         "Format": ["Short-form (<7 min)", "Long-form (≥7 min)"],
+#         "Count": [
+#             sum(1 for v in videos if isodate.parse_duration(v["duration"]).total_seconds() < 420),
+#             sum(1 for v in videos if isodate.parse_duration(v["duration"]).total_seconds() >= 420)
+#         ]
 #     })
-
 #     format_chart = (
 #         alt.Chart(sl_df)
 #         .mark_arc()
@@ -411,66 +330,51 @@ else:
 #         )
 #         .properties(height=300)
 #     )
-
 #     st.altair_chart(format_chart, use_container_width=True)
-
-#     st.caption(
-#         "A heavy short-form skew may inflate views but reduce depth and conversion."
-#     )
-
+#     st.caption("A heavy short-form skew may inflate views but reduce depth and conversion.")
 #     st.divider()
 
-#     # ---------------- ANALYSIS SECTION ----------------
+#     # ---------------- PERFORMANCE ANALYSIS ----------------
 #     st.subheader("Performance Analysis")
+#     dist = analysis.get("distribution_analysis", {})
+#     eng = analysis.get("engagement_analysis", {})
+#     aud = analysis.get("audience_quality", {})
+#     risk = analysis.get("risk_assessment", {})
 
-#     dist = analysis["distribution_analysis"]
 #     st.markdown(
 #         f"""
-#         **View Distribution:** {dist['distribution_type']}  
-#         {dist['explanation']}
+#         **View Distribution:** {dist.get('distribution_type','N/A')}  
+#         {dist.get('explanation','')}
 #         """
 #     )
-
-#     eng = analysis["engagement_analysis"]
 #     st.markdown(
 #         f"""
-#         **Engagement Rate:** {eng['engagement_rate_percent']}%  
-#         This reflects how actively viewers interact relative to total views.
+#         **Engagement Rate:** {eng.get('engagement_rate_percent',0)}%  
+#         Reflects how actively viewers interact relative to total views.  
 #         """
 #     )
-
-#     aud = analysis["audience_quality"]
 #     st.markdown(
 #         f"""
-#         **Audience Loyalty:** {aud['loyalty_percent']}%  
+#         **Audience Loyalty:** {aud.get('loyalty_percent',0)}%  
 #         Indicates how much of the subscriber base watches new uploads.
 #         """
 #     )
-
-#     risk = analysis["risk_assessment"]
 #     st.markdown(
 #         f"""
-#         **Risk Level:** {risk['risk_level']}  
+#         **Risk Level:** {risk.get('risk_level','N/A')}  
 #         Based on volatility and reliance on viral spikes.
 #         """
 #     )
-
 #     st.divider()
 
 #     # ---------------- MONETISATION ----------------
 #     st.subheader("Monetisation Metrics")
-
 #     col1, col2, col3, col4 = st.columns(4)
-
 #     col1.metric("Client Cost", f"{client_cost:,.2f}")
 #     col2.metric("Talent Cost", f"{talent_cost:,.2f}")
 #     col3.metric("CPM", metrics.calculate_CPM(client_cost))
 #     col4.metric("Engagement-Adjusted CPM", metrics.calculate_engagement_adjusted_CPM(client_cost))
-
-#     st.caption(
-#         "Engagement-adjusted CPM discounts inflated reach and rewards genuine interaction."
-#     )
-
+#     st.caption("Engagement-adjusted CPM discounts inflated reach and rewards genuine interaction.")
 #     st.divider()
 
 #     # ---------------- AI SUMMARY ----------------
@@ -478,9 +382,16 @@ else:
 #         ai = metrics.get_ai_analysis()
 #         st.write(ai.get("summary", "AI analysis unavailable."))
 
+#     # ---------------- EXPORT REPORT ----------------
+#     st.subheader("Export Dashboard Report")
+#     export_df = df.copy()
+#     export_df["engagement_percent"] = df["engagement_percent"]
+#     if st.button("Download CSV Report"):
+#         export_df.to_csv("youtube_dashboard_report.csv", index=False)
+#         st.success("CSV report saved as youtube_dashboard_report.csv")
+
 # else:
 #     st.info("Enter a YouTube channel and campaign details to begin.")
-
 
 
 
