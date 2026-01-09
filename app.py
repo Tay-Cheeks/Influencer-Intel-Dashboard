@@ -73,7 +73,7 @@ if run and creator_url:
     df["engagement"] = df["likes"] + df["comments"]
 
     # ---------------- AVRG vs MEDIAN VIEWS & VOLATILITY ----------------
-    st.subheader("View Performance Summary")
+    st.subheader("Average vs Median Views Comparison")
 
     col1, col2, col3 = st.columns(3)
 
@@ -95,30 +95,91 @@ if run and creator_url:
         help=f"Volatility Ratio: {report['volatility_ratio']} (Higher = less predictable)"
     )
 
-    avg_median_df = pd.DataFrame({
-    "Metric": ["Average Views", "Median Views"],
-    "Views": [report["mean_views"], report["median_views"]]
+    avg_med_df = pd.DataFrame({
+        "Metric": ["Average Views", "Median Views"],
+        "Views": [report["mean_views"], report["median_views"]]
     })
 
-    avg_median_chart = (
-        alt.Chart(avg_median_df)
+    avg_med_chart = (
+        alt.Chart(avg_med_df)
         .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
-            x=alt.X("Metric:N", title=""),
-            y=alt.Y("Views:Q", title="Views"),
-            tooltip=["Metric", "Views"]
+            x=alt.X("Metric:N", title=None),
+            y=alt.Y(
+                "Views:Q",
+                title="Views",
+                scale=alt.Scale(domain=[0, max(avg_med_df["Views"]) * 1.2])  # 🔒 lock scale
+            ),
+            color=alt.Color(
+                "Metric:N",
+                scale=alt.Scale(
+                    domain=["Average Views", "Median Views"],
+                    range=["#4F81BD", "#C0504D"]  # blue vs red
+                ),
+                legend=None
+            ),
+            tooltip=[
+                alt.Tooltip("Metric:N"),
+                alt.Tooltip("Views:Q", format=",")
+            ]
         )
-        .properties(height=250)
+        .properties(height=300)
     )
 
-    st.altair_chart(avg_median_chart, use_container_width=True)
+    st.altair_chart(avg_med_chart, use_container_width=True)
 
     st.caption(
-        """
-        A large difference between average and median views indicates volatility.
-        Brands typically value creators with strong median performance.
-        """
+        "Average views can be inflated by viral outliers, while median views reflect typical performance. "
+        "A large gap suggests volatility."
+        "Brands typically value creators with strong median performance."
     )
+
+    # st.subheader("View Performance Summary")
+
+    # col1, col2, col3 = st.columns(3)
+
+    # col1.metric(
+    #     "Average Views",
+    #     f"{report['mean_views']:,}",
+    #     help="Average views across recent uploads. Can be inflated by viral videos."
+    # )
+
+    # col2.metric(
+    #     "Median Views",
+    #     f"{report['median_views']:,}",
+    #     help="Typical views per video. More reliable indicator of baseline performance."
+    # )
+
+    # col3.metric(
+    #     "Volatility & Risk",
+    #     report["risk_level"],
+    #     help=f"Volatility Ratio: {report['volatility_ratio']} (Higher = less predictable)"
+    # )
+
+    # avg_median_df = pd.DataFrame({
+    # "Metric": ["Average Views", "Median Views"],
+    # "Views": [report["mean_views"], report["median_views"]]
+    # })
+
+    # avg_median_chart = (
+    #     alt.Chart(avg_median_df)
+    #     .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+    #     .encode(
+    #         x=alt.X("Metric:N", title=""),
+    #         y=alt.Y("Views:Q", title="Views"),
+    #         tooltip=["Metric", "Views"]
+    #     )
+    #     .properties(height=250)
+    # )
+
+    # st.altair_chart(avg_median_chart, use_container_width=True)
+
+    # st.caption(
+    #     """
+    #     A large difference between average and median views indicates volatility.
+    #     Brands typically value creators with strong median performance.
+    #     """
+    # )
 
 
 
@@ -157,30 +218,36 @@ if run and creator_url:
 
     views_chart = (
         alt.Chart(df)
-        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
             x=alt.X(
-                "title:N",
-                sort="-y",
-                title="Video"
+                "label:N",
+                sort=None,
+                title="Video",
+                axis=alt.Axis(labelLimit=160, labelAngle=-30)
             ),
             y=alt.Y(
                 "views:Q",
-                title="Views"
+                title="Views",
+                scale=alt.Scale(domain=[0, df["views"].max() * 1.15])
             ),
+            color=alt.value("#4F81BD"),
             tooltip=[
-                alt.Tooltip("title:N", title="Video"),
-                alt.Tooltip("views:Q", title="Views"),
-                alt.Tooltip("published_date:T", title="Published Date")
+                alt.Tooltip("title:N", title="Title"),
+                alt.Tooltip("published_date:T", title="Published"),
+                alt.Tooltip("views:Q", title="Views", format=",")
             ]
         )
-        .properties(height=350)
+        .properties(height=380)
         .interactive()
     )
 
     st.altair_chart(views_chart, use_container_width=True)
 
-    st.caption("Hover over each bar to view video title, publish date, and views.")
+    st.caption(
+        "Shows view performance of the most recent uploads. Hover to see video title, publish date, and views."
+    )
+
 
 
     # ---------------- LIKES vs COMMENTS CHART ---------------
