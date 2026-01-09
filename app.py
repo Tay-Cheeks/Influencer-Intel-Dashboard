@@ -1,325 +1,135 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-from datetime import datetime, timedelta, timezone
 from src.metrics.metrics import InfluencerMetrics
-from src.analysis.analyser import build_analysis
+from src.analysis.analyzer import build_analysis
+from src.youtube.client import get_channel_stats, get_recent_videos
 
+# ---------- App Config ----------
 st.set_page_config(page_title="Influencer Intel Dashboard", layout="wide")
 st.title("Influencer Intel Dashboard")
+st.write("Analyze YouTube influencer performance and monetisation metrics.")
 
-# ---------------- Sidebar Inputs ----------------
-st.sidebar.header("Creator & Settings")
-creator_url = st.sidebar.text_input("Enter YouTube channel URL or name")
-region = st.sidebar.selectbox("Region", ["Global", "South Africa", "USA", "UK", "Germany", "Other"])
-currency = st.sidebar.selectbox("Currency", ["ZAR", "USD", "EUR", "GBP"])
+# ---------- Input ----------
+creator_input = st.text_input("YouTube Channel URL / Handle / ID")
+client_cost = st.number_input("Client Cost (in your currency)", min_value=0.0, step=1.0)
+agency_margin = st.number_input("Agency Margin %", min_value=0.0, max_value=100.0, step=1.0)
 
-client_cost = st.sidebar.number_input(f"Client Cost ({currency})", min_value=0.0, value=500.0, step=50.0)
-agency_margin = st.sidebar.number_input("Agency Margin (%)", min_value=0.0, max_value=100.0, value=20.0, step=1.0)
+# ---------- Fetch & Process Data ----------
+@st.cache_data(ttl=3600)
+def get_metrics(creator_input, client_cost, agency_margin):
+    # Step 1: Fetch channel stats
+    channel_stats = get_channel_stats(creator_input)
+    if not channel_stats:
+        return None
 
-timeframe = st.sidebar.radio("Video Stats Timeframe", ["Daily (last 30 days)", "Weekly (last 4 weeks)"])
+    sub_count = channel_stats["subscribers"]
+    playlist_id = channel_stats["uploads_playlist_id"]
+    region = channel_stats["region"]
 
-# ---------------- Metrics Fetching ----------------
-@st.cache_data(ttl=86400)  # cache for 24 hours
-def get_metrics(url, region):
-    # Placeholder: Replace with YouTube API call to fetch latest video data
-    today = datetime.now(timezone.utc)
-    sample_videos = []
-    for i in range(10):
-        sample_videos.append({
-            "views": 2000 + i*50,
-            "likes": 180 + i*5,
-            "comments": 20 + i,
-            "publishedAt": (today - timedelta(days=i*3)).isoformat(),
-            "duration": "PT12M34S" if i % 2 == 0 else "PT5M0S"
-        })
-    sub_count = 10000
+    # Step 2: Fetch recent videos
+    video_data = get_recent_videos(playlist_id, count=8)
+    if not video_data:
+        return None
+
+    # Step 3: Create InfluencerMetrics instance
     metrics = InfluencerMetrics(
-        channel_name=url,
+        channel_name=channel_stats["channel_name"],
         sub_count=sub_count,
-        video_data=sample_videos,
+        video_data=video_data,
         region=region
     )
-    return metrics
 
-if creator_url:
-    try:
-        metrics = get_metrics(creator_url, region)
-        talent_cost = metrics.calculate_talent_cost(client_cost, agency_margin)
-        analysis = build_analysis(metrics)
+    # Step 4: Calculate talent cost
+    talent_cost = metrics.calculate_talent_cost(client_cost, agency_margin)
 
-        # ---------------- Overview ----------------
-        st.subheader("Overview")
-        st.write(analysis["overview"])
+    # Step 5: Build analysis
+    analysis_report = build_analysis(metrics)
 
-        # ---------------- Video Stats ----------------
-        st.subheader(f"{timeframe} Video Stats")
-        df = pd.DataFrame(metrics.video_data)
-        df["publishedAt"] = pd.to_datetime(df["publishedAt"])
-        df = df.sort_values("publishedAt")
+    # Add monetisation info
+    analysis_report["monetisation"] = {
+        "client_cost": client_cost,
+        "agency_margin_percent": agency_margin,
+        "talent_cost": talent_cost,
+        "avg_views_recent": round(sum(v["views"] for v in video_data)/len(video_data), 2),
+        "median_views_recent": round(pd.Series([v["views"] for v in video_data]).median(), 2)
+    }
 
-        if timeframe.startswith("Weekly"):
-            df["week"] = df["publishedAt"].dt.to_period("W").apply(lambda r: r.start_time)
-            df_grouped = df.groupby("week")[["views", "likes", "comments"]].sum().reset_index()
-            df_chart = df_grouped.melt(id_vars=["week"], value_vars=["views", "likes", "comments"],
-                                       var_name="Metric", value_name="Count")
-            x_axis = "week:T"
-        else:
-            df_chart = df.melt(id_vars=["publishedAt"], value_vars=["views", "likes", "comments"],
-                               var_name="Metric", value_name="Count")
-            x_axis = "publishedAt:T"
+    # Add video data for charts
+    # Calculate view-to-sub ratio for each video
+    for v in video_data:
+        v["view_to_sub_ratio"] = round((v["views"] / sub_count * 100) if sub_count else 0, 2)
+        v["engagement_rate"] = round(((v["likes"] + v["comments"]) / v["views"] * 100) if v["views"] else 0, 2)
 
-        chart = alt.Chart(df_chart).mark_line(point=True).encode(
-            x=x_axis,
-            y="Count:Q",
-            color="Metric:N",
-            tooltip=[x_axis, "Metric:N", "Count:Q"]
-        ).interactive()
-        st.altair_chart(chart, use_container_width=True)
+    analysis_report["video_data"] = video_data
 
-        # ---------------- Performance Distribution ----------------
-        st.subheader("Performance Distribution")
-        st.write(analysis["distribution_analysis"])
+    return analysis_report
 
-        # ---------------- Engagement ----------------
-        st.subheader("Engagement Metrics")
-        df_engagement = pd.DataFrame({
-            "Metric": ["Engagement Rate", "Like Rate", "Comment Rate"],
-            "Percent": [
-                analysis["engagement_analysis"]["engagement_rate_percent"],
-                analysis["engagement_analysis"]["like_rate_percent"],
-                analysis["engagement_analysis"]["comment_rate_percent"]
-            ]
-        })
-        engagement_chart = alt.Chart(df_engagement).mark_bar().encode(
-            x='Metric',
-            y='Percent',
-            tooltip=['Metric', 'Percent']
-        )
-        st.altair_chart(engagement_chart, use_container_width=True)
-        st.write(analysis["engagement_analysis"])
+# ---------- Main ----------
+if creator_input:
+    with st.spinner("Fetching metrics..."):
+        metrics = get_metrics(creator_input, client_cost, agency_margin)
 
-        # ---------------- Audience Quality ----------------
+    if metrics:
+        st.subheader("Channel Overview")
+        st.write(metrics["overview"])
+
+        st.subheader("Distribution Analysis")
+        st.write(metrics["distribution_analysis"])
+
+        st.subheader("Engagement Analysis")
+        st.write(metrics["engagement_analysis"])
+
         st.subheader("Audience Quality")
-        st.write(analysis["audience_quality"])
+        st.write(metrics["audience_quality"])
 
-        # ---------------- Risk Assessment ----------------
+        st.subheader("Content Strategy")
+        st.write(metrics["content_strategy"])
+
         st.subheader("Risk Assessment")
-        st.write(analysis["risk_assessment"])
+        st.write(metrics["risk_assessment"])
 
-        # ---------------- Benchmark Positioning ----------------
         st.subheader("Benchmark Positioning")
-        st.write(analysis["benchmark_positioning"])
+        st.write(metrics["benchmark_positioning"])
 
-        # ---------------- Monetisation ----------------
-        st.subheader("Monetisation Metrics")
-        monetisation = {
-            "Client Cost": f"{client_cost} {currency}",
-            "Agency Margin (%)": agency_margin,
-            "Talent Cost": f"{talent_cost} {currency}",
-            "CPM": metrics.calculate_CPM(talent_cost),
-            "CPE": metrics.calculate_CPE(talent_cost),
-            "CPV": metrics.calculate_CPV(talent_cost),
-            "Engagement-Adjusted CPM": metrics.calculate_engagement_adjusted_CPM(talent_cost)
-        }
-        st.write(monetisation)
+        st.subheader("Monetisation")
+        st.write(metrics["monetisation"])
 
-    except Exception as e:
-        st.error(f"Failed to load metrics: {e}")
+        # ---------- Video Charts ----------
+        st.subheader("Recent Video Metrics")
 
+        video_df = pd.DataFrame(metrics["video_data"])
+        video_df["title"] = [f"Video {i+1}" for i in range(len(video_df))]  # Optional placeholder titles
 
+        # Views per video
+        view_chart = alt.Chart(video_df).mark_bar().encode(
+            x=alt.X("title", sort=None, title="Videos"),
+            y=alt.Y("views", title="Views"),
+            tooltip=["title", "views", "likes", "comments", "view_to_sub_ratio"]
+        ).properties(height=300)
+        st.altair_chart(view_chart, use_container_width=True)
 
+        # Likes and comments per video (grouped bar)
+        lc_chart = alt.Chart(video_df.melt(id_vars=["title"], value_vars=["likes", "comments"])).mark_bar().encode(
+            x=alt.X("title", sort=None, title="Videos"),
+            y=alt.Y("value", title="Count"),
+            color="variable",
+            tooltip=["title", "variable", "value"]
+        ).properties(height=300)
+        st.altair_chart(lc_chart, use_container_width=True)
 
+        # Engagement rate per video
+        er_chart = alt.Chart(video_df).mark_line(point=True).encode(
+            x=alt.X("title", sort=None, title="Videos"),
+            y=alt.Y("engagement_rate", title="Engagement Rate (%)"),
+            tooltip=["title", "engagement_rate"]
+        ).properties(height=300)
+        st.altair_chart(er_chart, use_container_width=True)
 
+        # Top performing videos
+        st.subheader("Top Performing Videos")
+        top_videos = video_df.sort_values(by="views", ascending=False)
+        st.dataframe(top_videos[["title", "views", "likes", "comments", "engagement_rate", "view_to_sub_ratio"]])
 
-
-# import streamlit as st
-# import altair as alt
-# import pandas as pd
-# from datetime import datetime
-
-# import sys
-# import os
-
-# sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
-
-
-# from src.metrics.metrics import InfluencerMetrics
-# from src.analysis.analyser import build_analysis
-
-# # ---------------------------
-# # Streamlit config
-# # ---------------------------
-# st.set_page_config(
-#     page_title="Creator Performance Dashboard",
-#     layout="wide"
-# )
-
-# st.title("🎯 Creator Performance & Monetisation Dashboard")
-# st.caption("Data-driven influencer analysis for brand & talent decisions")
-
-# # ---------------------------
-# # Sidebar – Inputs for Emma
-# # ---------------------------
-# st.sidebar.header("🔗 Creator Input")
-
-# creator_url = st.sidebar.text_input(
-#     "YouTube Channel or Video URL",
-#     placeholder="https://www.youtube.com/@creator"
-# )
-
-# talent_cost = st.sidebar.number_input(
-#     "Talent Cost (ZAR)",
-#     min_value=0.0,
-#     value=400.0,
-#     step=50.0
-# )
-
-# region = st.sidebar.selectbox(
-#     "Primary Audience Region",
-#     ["South Africa", "Global", "US", "EU"]
-# )
-
-# run_analysis = st.sidebar.button("Run Analysis")
-
-# # ---------------------------
-# # Cached data fetch (daily)
-# # ---------------------------
-# @st.cache_data(ttl=86400)  # 24 hours
-# def get_metrics(url, talent_cost, region):
-#     """
-#     Fetch creator data + compute metrics.
-#     TTL ensures daily refresh.
-#     """
-
-#     # TODO: replace this stub with real YouTube API data
-#     video_data = [
-#         {"views": 2200, "likes": 210, "comments": 30, "days_since_posted": 2},
-#         {"views": 1800, "likes": 160, "comments": 18, "days_since_posted": 6},
-#         {"views": 2000, "likes": 180, "comments": 20, "days_since_posted": 10},
-#     ]
-
-#     metrics = InfluencerMetrics(
-#         channel_name=url,
-#         subscribers=12000,
-#         video_data=video_data,
-#         region=region,
-#         talent_cost=talent_cost
-#     )
-
-#     return metrics
-
-
-# # ---------------------------
-# # Run analysis
-# # ---------------------------
-# if run_analysis and creator_url:
-
-#     metrics = get_metrics(creator_url, talent_cost, region)
-#     analysis = build_analysis(metrics)
-
-#     report = metrics.get_performance_report()
-#     monetisation = metrics.get_monetisation_metrics()
-
-#     # ---------------------------
-#     # KPI Row
-#     # ---------------------------
-#     st.subheader("📊 Key Performance Indicators")
-
-#     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-
-#     kpi1.metric("Mean Views", report["mean_views"])
-#     kpi2.metric("Median Views", report["median_views"])
-#     kpi3.metric("Engagement Rate", f'{report["engagement_rate_percent"]}%')
-#     kpi4.metric("Dashboard Score", f'{analysis["dashboard_score"]:.1f}')
-
-#     # ---------------------------
-#     # Mean vs Median Analysis
-#     # ---------------------------
-#     st.subheader("📈 View Distribution Health")
-
-#     view_df = pd.DataFrame({
-#         "Metric": ["Mean Views", "Median Views"],
-#         "Views": [report["mean_views"], report["median_views"]]
-#     })
-
-#     bar_chart = alt.Chart(view_df).mark_bar().encode(
-#         x="Metric",
-#         y="Views",
-#         color="Metric"
-#     )
-
-#     st.altair_chart(bar_chart, use_container_width=True)
-
-#     if report["mean_views"] < report["median_views"]:
-#         st.info(
-#             "Median views are higher than mean views. "
-#             "This indicates **stable performance without heavy spikes**."
-#         )
-#     else:
-#         st.warning(
-#             "Mean views exceed median views. "
-#             "Performance may be driven by a few viral videos."
-#         )
-
-#     # ---------------------------
-#     # Engagement Breakdown
-#     # ---------------------------
-#     st.subheader("💬 Engagement Composition")
-
-#     engagement_df = pd.DataFrame({
-#         "Type": ["Likes", "Comments"],
-#         "Rate (%)": [
-#             report["like_rate_percent"],
-#             report["comment_rate_percent"]
-#         ]
-#     })
-
-#     pie_chart = alt.Chart(engagement_df).mark_arc().encode(
-#         theta="Rate (%)",
-#         color="Type"
-#     )
-
-#     st.altair_chart(pie_chart, use_container_width=True)
-
-#     # ---------------------------
-#     # Consistency & Risk
-#     # ---------------------------
-#     st.subheader("⚠️ Risk & Consistency Signals")
-
-#     st.write(f"**Risk Level:** {report['risk_level']}")
-#     st.write("**Anti-Fraud Checks:**")
-
-#     for signal, value in report["anti_fraud_signals"].items():
-#         if value:
-#             st.error(f"⚠️ {signal.replace('_', ' ').title()}")
-#         else:
-#             st.success(f"✓ {signal.replace('_', ' ').title()}")
-
-#     # ---------------------------
-#     # Monetisation Metrics
-#     # ---------------------------
-#     st.subheader("💰 Monetisation Snapshot")
-
-#     m1, m2, m3, m4 = st.columns(4)
-
-#     m1.metric("CPM", f"R{monetisation['cpm']}")
-#     m2.metric("CPE", f"R{monetisation['cpe']}")
-#     m3.metric("CPV", f"R{monetisation['cpv']}")
-#     m4.metric("Adj. CPM", f"R{monetisation['engagement_adjusted_cpm']}")
-
-#     # ---------------------------
-#     # Final Recommendation
-#     # ---------------------------
-#     st.subheader("🧠 Analyst Summary")
-
-#     st.markdown(f"""
-#     **Overall Rating:** {analysis["interpretation"]}
-
-#     **Why this matters for Emma:**
-#     - Consistency score suggests **predictable delivery**
-#     - Engagement sits **above benchmark**
-#     - Cost efficiency is **acceptable for branded campaigns**
-#     """)
-
-#     st.caption(f"Last refreshed: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    else:
+        st.error("Failed to fetch metrics. Please check the channel URL/handle and try again.")
