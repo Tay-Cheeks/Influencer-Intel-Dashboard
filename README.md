@@ -84,8 +84,8 @@ Requirements
     - pip
 
 ## Setup
-git clone <repo-url>
-cd influencer-intelligence-dashboard
+git clone git@gitlab.com:Tay-Cheeks/influencer-intel-hub.git
+cd influencer-intel-hub
 pip install -r requirements.txt
 
 Environment Variables

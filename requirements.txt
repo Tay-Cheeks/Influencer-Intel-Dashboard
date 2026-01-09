@@ -7,5 +7,5 @@ openai
 numpy
 altair
 matplotlib
-
+isodate
 
