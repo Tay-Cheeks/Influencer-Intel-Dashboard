@@ -4,3 +4,8 @@ python-dotenv
 requests
 pandas
 openai
+numpy
+altair
+matplotlib
+
+

@@ -6,14 +6,14 @@ from googleapiclient.discovery import build
 from dotenv import load_dotenv
 from .parser import extract_identifier
 
-# Load API key from .env
+#Load API key from .env
 load_dotenv()
 YT_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 if not YT_API_KEY:
     raise ValueError("You must set YOUTUBE_API_KEY in your .env file")
 
-# Create the YouTube API client
+#Create the YouTube API client
 youtube = build("youtube", "v3", developerKey=YT_API_KEY)
 
 
@@ -38,7 +38,7 @@ def get_channel_stats(channel_input: str):
                 part="snippet,statistics,contentDetails",
                 forHandle=identifier
             )
-        else:  # Channel ID
+        else:  #Channel ID
             request = youtube.channels().list(
                 part="snippet,statistics,contentDetails",
                 id=identifier

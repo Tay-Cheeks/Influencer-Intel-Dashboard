@@ -1,4 +1,4 @@
-from .client import get_channel_stats, get_recent_videos
+from ..src.youtube.client import get_channel_stats, get_recent_videos
 
 channel = "@MrBeast"
 stats = get_channel_stats(channel)
