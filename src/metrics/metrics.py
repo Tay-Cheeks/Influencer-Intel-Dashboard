@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class InfluencerMetrics:
     def __init__(self, channel_name, sub_count, video_data, region="Global"):
         self.channel_name = channel_name
@@ -39,7 +40,7 @@ class InfluencerMetrics:
         like_rate = total_likes / total_views * 100 if total_views else 0
         comment_rate = total_comments / total_views * 100 if total_views else 0
 
-        # Engagement consistency (stdev)
+        # Engagement consistency
         per_video_engagement = [
             (v["likes"] + v["comments"]) / v["views"] * 100 if v["views"] else 0
             for v in self.video_data
@@ -64,7 +65,7 @@ class InfluencerMetrics:
         for v in self.video_data:
             try:
                 duration = isodate.parse_duration(v["duration"]).total_seconds()
-                if duration < 420:  # 7 minutes
+                if duration < 420:  # 7 min cutoff
                     short_views.append(v["views"])
                     short_count += 1
                 else:
@@ -117,22 +118,6 @@ class InfluencerMetrics:
             "anti_fraud_signals": anti_fraud_signals
         }
 
-        # Build analysis-friendly dict
-        report["distribution_analysis"] = {
-            "distribution_type": "N/A",  # can be updated by analysis function later
-            "explanation": f"{short_count} short-form and {long_count} long-form videos"
-        }
-        report["engagement_analysis"] = {
-            "engagement_rate_percent": round(engagement_rate, 2),
-            "comment_to_like_ratio": round(comment_rate / max(like_rate, 1), 2)
-        }
-        report["audience_quality"] = {
-            "loyalty_percent": round(loyalty_percent, 2)
-        }
-        report["risk_assessment"] = {
-            "risk_level": risk_level
-        }
-
         return report
 
     # ---------------- MONETISATION ----------------
@@ -157,13 +142,27 @@ class InfluencerMetrics:
             Return JSON with: score (0-100) and summary.
             """
             os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
-            self._ai_cache = get_ai_score(prompt)
+            try:
+                self._ai_cache = get_ai_score(prompt)
+            except:
+                # fallback if AI fails
+                self._ai_cache = {"score": 0, "summary": "AI analysis unavailable."}
         return self._ai_cache
 
     @property
     def dashboard_score(self):
         ai = self.get_ai_analysis()
-        return ai.get("score", 0)
+        score = ai.get("score", 0)
+
+        # fallback calculation
+        if score == 0:
+            report = self.get_performance_report()
+            if report:
+                eng = report.get("engagement_rate_percent", 0)
+                loy = report.get("loyalty_percent", 0)
+                cons = max(0, 100 - report.get("engagement_consistency_percent", 0)*10)
+                score = round(min(max(0.4*eng + 0.3*loy + 0.3*cons, 0), 100), 2)
+        return score
 
     @property
     def dashboard_interpretation(self):

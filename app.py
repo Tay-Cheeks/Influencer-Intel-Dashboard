@@ -2,9 +2,11 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
+import json
 
 from src.youtube.client import get_channel_stats, get_recent_videos
 from src.metrics.metrics import InfluencerMetrics
+from src.analyser.analyser import build_analysis, get_creator_tier
 
 # ---------------- STREAMLIT CONFIG ----------------
 st.set_page_config(
@@ -49,8 +51,12 @@ if run_btn and creator_url:
     report = metrics.get_performance_report()
     talent_cost = metrics.calculate_talent_cost(client_cost, agency_margin)
 
+    # ---------------- ANALYSIS ----------------
+    analysis = build_analysis(metrics)
+    creator_tier = get_creator_tier(metrics.sub_count)
+
     # ---------------- TOP SUMMARY ----------------
-    st.subheader(channel["channel_name"])
+    st.subheader(f"{channel['channel_name']} ({creator_tier})")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Subscribers", f"{channel['subscribers']:,}")
     col2.metric("Average Views (8 videos)", f"{report['mean_views']:,}")
@@ -75,13 +81,12 @@ if run_btn and creator_url:
         .properties(height=350)
     )
     st.altair_chart(views_chart, use_container_width=True)
-
     st.caption("This chart shows views for the creator’s most recent 8 uploads.")
 
     # ---------------- ENGAGEMENT CHART ----------------
     st.subheader("Engagement Breakdown")
     engagement_df = df.melt(
-        id_vars=["label"],
+        id_vars=["label", "published_date"],
         value_vars=["likes", "comments"],
         var_name="Type",
         value_name="Count"
@@ -94,19 +99,13 @@ if run_btn and creator_url:
             x=alt.X("label:N", title="Video"),
             y=alt.Y("Count:Q", title="Engagement"),
             color="Type:N",
-            order=alt.Order(
-                'Type',
-                sort='ascending'  # comments below likes
-            ),
+            order=alt.Order('Type', sort='ascending'),  # comments below likes
             tooltip=["label", "Type", "Count", alt.Tooltip("published_date:T", title="Date")]
         )
         .properties(height=350)
     )
     st.altair_chart(engagement_chart, use_container_width=True)
-
-    st.caption(
-        "Likes and comments per video. Moderate comment-to-like ratio → normal engagement."
-    )
+    st.caption("Likes and comments per video. Moderate comment-to-like ratio → normal engagement.")
 
     # ---------------- SHORTS VS LONG FORM ----------------
     st.subheader("Content Format Mix")
@@ -114,7 +113,6 @@ if run_btn and creator_url:
         "Format": ["Short-form (<7 min)", "Long-form (≥7 min)"],
         "Count": [report["short_long_split"]["short_form"], report["short_long_split"]["long_form"]]
     })
-
     format_chart = (
         alt.Chart(sl_df)
         .mark_arc()
@@ -126,20 +124,19 @@ if run_btn and creator_url:
         .properties(height=300)
     )
     st.altair_chart(format_chart, use_container_width=True)
-
     st.caption("Short-form skew may inflate views but reduce depth.")
 
     # ---------------- PERFORMANCE ANALYSIS ----------------
     st.subheader("Performance Analysis")
-    dist = report.get("distribution_analysis", {})
-    eng = report.get("engagement_analysis", {})
-    aud = report.get("audience_quality", {})
-    risk = report.get("risk_assessment", {})
+    dist = analysis["views_distribution"]
+    eng = analysis["engagement"]
+    aud = analysis["audience_loyalty"]
+    risk = analysis["risk"]
 
-    st.markdown(f"**View Distribution:** {dist.get('distribution_type', 'N/A')}  \n{dist.get('explanation','')}")
-    st.markdown(f"**Engagement Rate:** {eng.get('engagement_rate_percent',0)}%  \nComment-to-Like Ratio: {eng.get('comment_to_like_ratio',0)}")
-    st.markdown(f"**Audience Loyalty:** {aud.get('loyalty_percent',0)}%")
-    st.markdown(f"**Risk Level:** {risk.get('risk_level','N/A')}")
+    st.markdown(f"**View Distribution:** {dist['type']}  \n{dist['explanation']}")
+    st.markdown(f"**Engagement Rate:** {eng['rate']}%  \nBenchmark: {eng['benchmark_position']}")
+    st.markdown(f"**Audience Loyalty:** {aud['loyalty_percent']}%  \nBenchmark: {aud['benchmark_position']}")
+    st.markdown(f"**Risk Level:** {risk['risk_level']}")
 
     # ---------------- MONETISATION ----------------
     st.subheader("Monetisation Metrics")
@@ -154,10 +151,30 @@ if run_btn and creator_url:
         ai = metrics.get_ai_analysis()
         st.write(ai.get("summary", "AI analysis unavailable."))
 
+    # ---------------- EXPORT REPORT ----------------
+    st.subheader("Export Dashboard Report")
+    report_export = {
+        "channel": channel,
+        "creator_tier": creator_tier,
+        "metrics": report,
+        "analysis": analysis,
+        "monetisation": {
+            "client_cost": client_cost,
+            "talent_cost": talent_cost,
+            "CPM": metrics.calculate_CPM(client_cost),
+            "engagement_adjusted_CPM": metrics.calculate_engagement_adjusted_CPM(client_cost)
+        },
+        "AI_summary": ai
+    }
+    st.download_button(
+        label="Download Report as JSON",
+        data=json.dumps(report_export, indent=2),
+        file_name=f"{channel['channel_name']}_dashboard_report.json",
+        mime="application/json"
+    )
+
 else:
     st.info("Enter a YouTube channel and campaign details to begin.")
-
-
 
 
 # import streamlit as st
