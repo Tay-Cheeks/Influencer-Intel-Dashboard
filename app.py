@@ -186,136 +186,107 @@ if run and creator_url:
     # ---------------- PERFORMANCE CHART ----------------
     st.subheader("Views per Recent Video")
 
-    # Ensure proper types
-    df["views"] = pd.to_numeric(df["views"], errors="coerce")
-    df["published_date"] = pd.to_datetime(df["published_date"], errors="coerce")
+    st.subheader("Performance & Velocity")
+    st.caption(
+        """
+        This section evaluates how consistently the creator performs over time 
+        and whether recent content is gaining momentum. 
+        It helps identify if performance is stable, declining, or driven by short-term spikes.
+        """
+    )
 
-    # Drop any rows with missing values
-    df = df.dropna(subset=["views", "label", "published_date"])
-
-    views_chart = (
+    perf_chart = (
         alt.Chart(df)
-        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_line(point=True)
         .encode(
-            x=alt.X("label:N", sort=alt.EncodingSortField(field="views", order="descending"), title="Video"),
-            y=alt.Y("views:Q", title="Views", axis=alt.Axis(format="~s")),
+            x="published_date:T",
+            y="views:Q",
+            tooltip=["title", "views"]
+        )
+        .properties(height=300)
+    )
+    st.altair_chart(perf_chart, use_container_width=True)
+
+    st.markdown(
+        f"""
+        **Risk:** {report['risk_level']}  
+        **Velocity (7d):** {report['velocity_views_7d']:,} views  
+        **Benchmark Velocity Contribution:** High-performing creators ≥ 25%
+        """
+    )
+
+    # ---------------- VIDEO VIEWS CHART ---------------------
+    st.subheader("Views per Recent Video")
+
+    # ----------------------------
+    # Data safety & preparation
+    # ----------------------------
+    views_df = df.copy()  # Use existing df
+
+    # Ensure correct dtypes
+    views_df["views"] = pd.to_numeric(views_df["views"], errors="coerce")
+    views_df["published_date"] = pd.to_datetime(
+        views_df["published_date"], errors="coerce"
+    )
+
+    # Drop broken rows
+    views_df = views_df.dropna(subset=["views", "title", "published_date"])
+
+    # Sort newest → oldest
+    views_df = views_df.sort_values("published_date", ascending=False)
+
+    # Limit to most recent 8
+    views_df = views_df.head(8)
+
+    # Create readable date
+    views_df["date"] = views_df["published_date"].dt.strftime("%d %b %Y")
+
+    # ----------------------------
+    # Altair Bar Chart
+    # ----------------------------
+    views_chart = (
+        alt.Chart(views_df)
+        .mark_bar(
+            cornerRadiusTopLeft=4,
+            cornerRadiusTopRight=4
+        )
+        .encode(
+            x=alt.X(
+                "title:N",
+                sort="-y",
+                title="Video",
+                axis=alt.Axis(labelLimit=120)
+            ),
+            y=alt.Y(
+                "views:Q",
+                title="Views",
+                axis=alt.Axis(format="~s")
+            ),
             tooltip=[
                 alt.Tooltip("title:N", title="Video"),
-                alt.Tooltip("published_date:T", title="Published"),
+                alt.Tooltip("date:N", title="Published"),
                 alt.Tooltip("views:Q", title="Views", format=",")
             ],
-            color=alt.value("#4F46E5")
+            color=alt.value("#4F46E5")  # Indigo
         )
-        .properties(height=350, width="container")
-        .configure_axis(grid=True, gridOpacity=0.15)
+        .properties(
+            height=360,
+            width="container"
+        )
+        .configure_axis(
+            grid=True,
+            gridOpacity=0.15,
+            labelFontSize=11,
+            titleFontSize=12
+        )
     )
 
     st.altair_chart(views_chart, use_container_width=True)
-    st.caption("This chart shows views for the creator’s most recent 8 uploads.")
 
-
-    # st.subheader("Performance & Velocity")
-    # st.caption(
-    #     """
-    #     This section evaluates how consistently the creator performs over time 
-    #     and whether recent content is gaining momentum. 
-    #     It helps identify if performance is stable, declining, or driven by short-term spikes.
-    #     """
-    # )
-
-    # perf_chart = (
-    #     alt.Chart(df)
-    #     .mark_line(point=True)
-    #     .encode(
-    #         x="published_date:T",
-    #         y="views:Q",
-    #         tooltip=["title", "views"]
-    #     )
-    #     .properties(height=300)
-    # )
-    # st.altair_chart(perf_chart, use_container_width=True)
-
-    # st.markdown(
-    #     f"""
-    #     **Risk:** {report['risk_level']}  
-    #     **Velocity (7d):** {report['velocity_views_7d']:,} views  
-    #     **Benchmark Velocity Contribution:** High-performing creators ≥ 25%
-    #     """
-    # )
-
-    # # ---------------- VIDEO VIEWS CHART ---------------------
-    # st.subheader("Views per Recent Video")
-
-    # # ----------------------------
-    # # Data safety & preparation
-    # # ----------------------------
-    # views_df = recent_videos_df.copy()
-
-    # # Ensure correct dtypes
-    # views_df["views"] = pd.to_numeric(views_df["views"], errors="coerce")
-    # views_df["published_at"] = pd.to_datetime(
-    #     views_df["published_at"], errors="coerce"
-    # )
-
-    # # Drop broken rows
-    # views_df = views_df.dropna(subset=["views", "title", "published_at"])
-
-    # # Sort newest → oldest
-    # views_df = views_df.sort_values("published_at", ascending=False)
-
-    # # Limit to most recent 8
-    # views_df = views_df.head(8)
-
-    # # Create readable date
-    # views_df["date"] = views_df["published_at"].dt.strftime("%d %b %Y")
-
-    # # ----------------------------
-    # # Altair Bar Chart
-    # # ----------------------------
-    # views_chart = (
-    #     alt.Chart(views_df)
-    #     .mark_bar(
-    #         cornerRadiusTopLeft=4,
-    #         cornerRadiusTopRight=4
-    #     )
-    #     .encode(
-    #         x=alt.X(
-    #             "title:N",
-    #             sort="-y",
-    #             title="Video",
-    #             axis=alt.Axis(labelLimit=120)
-    #         ),
-    #         y=alt.Y(
-    #             "views:Q",
-    #             title="Views",
-    #             axis=alt.Axis(format="~s")
-    #         ),
-    #         tooltip=[
-    #             alt.Tooltip("title:N", title="Video"),
-    #             alt.Tooltip("date:N", title="Published"),
-    #             alt.Tooltip("views:Q", title="Views", format=",")
-    #         ],
-    #         color=alt.value("#4F46E5")  # Indigo
-    #     )
-    #     .properties(
-    #         height=360,
-    #         width="container"
-    #     )
-    #     .configure_axis(
-    #         grid=True,
-    #         gridOpacity=0.15,
-    #         labelFontSize=11,
-    #         titleFontSize=12
-    #     )
-    # )
-
-    # st.altair_chart(views_chart, use_container_width=True)
-
-    # st.caption(
-    #     "This chart shows views for the creator’s most recent uploads. "
-    #     "Hover over each bar to see the video title, publish date, and exact views."
-    # )
-
+    st.caption(
+        "This chart shows views for the creator’s most recent uploads. "
+        "Hover over each bar to see the video title, publish date, and exact views."
+    )
 
 
 
