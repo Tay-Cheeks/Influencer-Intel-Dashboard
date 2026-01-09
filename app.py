@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from src.metrics.metrics import InfluencerMetrics
-from src.analysis.analyzer import build_analysis
+from src.analysis.analyser import build_analysis
 from src.youtube.client import get_channel_stats, get_recent_videos
 
 # ---------- App Config ----------
