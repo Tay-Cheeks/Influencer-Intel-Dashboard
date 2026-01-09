@@ -74,6 +74,11 @@ if run_btn and creator_url:
     # ---------------- TOP SUMMARY ----------------
     st.subheader(channel["channel_name"])
 
+    overview = analysis.get("overview", {})
+
+    dashboard_score = overview.get("dashboard_score", "N/A")
+    performance_label = overview.get("performance_label", "Unavailable")
+
     col1, col2, col3, col4 = st.columns(4)
 
     col1.metric("Subscribers", f"{channel['subscribers']:,}")
@@ -81,11 +86,10 @@ if run_btn and creator_url:
     col3.metric("Median Views", f"{report['median_views']:,}")
     col4.metric(
         "Dashboard Score",
-        f"{analysis['overview']['dashboard_score']}",
-        analysis["overview"]["performance_label"]
+        dashboard_score,
+        performance_label
     )
 
-    st.divider()
 
     # ---------------- DATAFRAME ----------------
     df = pd.DataFrame(videos)
