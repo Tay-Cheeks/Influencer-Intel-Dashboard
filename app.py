@@ -56,6 +56,7 @@ if run and creator_url:
             quick, decision-ready view of a creator’s overall quality.
 
             It combines:
+            
             • Engagement rate vs industry benchmarks  
             • Audience loyalty (views-to-subscriber ratio)  
             • Engagement consistency (volatility control)  
@@ -94,12 +95,31 @@ if run and creator_url:
         help=f"Volatility Ratio: {report['volatility_ratio']} (Higher = less predictable)"
     )
 
+    avg_median_df = pd.DataFrame({
+    "Metric": ["Average Views", "Median Views"],
+    "Views": [report["mean_views"], report["median_views"]]
+    })
+
+    avg_median_chart = (
+        alt.Chart(avg_median_df)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=alt.X("Metric:N", title=""),
+            y=alt.Y("Views:Q", title="Views"),
+            tooltip=["Metric", "Views"]
+        )
+        .properties(height=250)
+    )
+
+    st.altair_chart(avg_median_chart, use_container_width=True)
+
     st.caption(
         """
-        A large gap between average and median views indicates volatility. 
-        Brands prefer creators with strong median performance and low volatility.
+        A large difference between average and median views indicates volatility.
+        Brands typically value creators with strong median performance.
         """
     )
+
 
 
     # ---------------- PERFORMANCE CHART ----------------
@@ -137,14 +157,21 @@ if run and creator_url:
 
     views_chart = (
         alt.Chart(df)
-        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
-            x=alt.X("title:N", sort="-y", title="Video"),
-            y=alt.Y("views:Q", title="Views"),
+            x=alt.X(
+                "title:N",
+                sort="-y",
+                title="Video"
+            ),
+            y=alt.Y(
+                "views:Q",
+                title="Views"
+            ),
             tooltip=[
                 alt.Tooltip("title:N", title="Video"),
                 alt.Tooltip("views:Q", title="Views"),
-                alt.Tooltip("published_date:T", title="Published")
+                alt.Tooltip("published_date:T", title="Published Date")
             ]
         )
         .properties(height=350)
@@ -153,26 +180,33 @@ if run and creator_url:
 
     st.altair_chart(views_chart, use_container_width=True)
 
-    st.caption("Hover over bars to see detailed performance per video.")
+    st.caption("Hover over each bar to view video title, publish date, and views.")
 
 
     # ---------------- LIKES vs COMMENTS CHART ---------------
     st.subheader("Engagement Breakdown")
 
-    eng_df = df.melt(
+    engagement_df = df.melt(
         id_vars=["title", "published_date"],
         value_vars=["likes", "comments"],
         var_name="Engagement Type",
         value_name="Count"
     )
 
-    eng_chart = (
-        alt.Chart(eng_df)
+    engagement_chart = (
+        alt.Chart(engagement_df)
         .mark_bar()
         .encode(
             x=alt.X("title:N", title="Video"),
             y=alt.Y("Count:Q", title="Engagement"),
-            color=alt.Color("Engagement Type:N"),
+            color=alt.Color(
+                "Engagement Type:N",
+                sort=["likes", "comments"]
+            ),
+            order=alt.Order(
+                "Engagement Type:N",
+                sort="ascending"
+            ),
             tooltip=[
                 "Engagement Type",
                 "Count",
@@ -183,9 +217,20 @@ if run and creator_url:
         .interactive()
     )
 
-    st.altair_chart(eng_chart, use_container_width=True)
+    st.altair_chart(engagement_chart, use_container_width=True)
 
-    st.caption("Balanced comment-to-like ratios typically indicate healthier engagement.")
+    st.caption(
+    """
+    **How to read this chart:**  
+    • Likes represent passive approval  
+    • Comments indicate deeper engagement and emotional response  
+
+    **Balanced ratio:**  
+    A healthy creator typically shows comments at 3–10% of likes.  
+    Very low comments may suggest passive or inflated engagement.  
+    Exceptionally high comments can indicate controversy or polarising content.
+    """
+    )
 
 
     # ---------------- SHORT vs LONG ANALYSIS ----------------
@@ -248,69 +293,100 @@ if run and creator_url:
     # st.caption(conclusion)
 
     # ---------------- MONETISATION ----------------
-    st.subheader("Monetisation Metrics")
+    st.subheader("Monetisation Metrics & Benchmarks")
 
-    st.markdown("### CPM — Cost Per 1,000 Views")
+    # Industry benchmarks (SA / emerging market averages)
+    benchmarks = {
+        "CPM": "R50–R150 (YouTube SA average)",
+        "CPV": "R0.05–R0.30 per view",
+        "CPE": "R1.00–R5.00 per engagement",
+        "Engagement Adjusted CPM": "Below standard CPM indicates strong value"
+    }
+
+    total_views = sum(v["views"] for v in videos)
+    total_engagements = sum(v["likes"] + v["comments"] for v in videos)
+
+    cpm = metrics.calculate_CPM(client_cost)
+    cpv = round(client_cost / max(total_views, 1), 4)
+    cpe = round(client_cost / max(total_engagements, 1), 2)
+    eng_adj_cpm = metrics.calculate_engagement_adjusted_CPM(client_cost)
+    talent_cost = metrics.calculate_talent_cost(client_cost, agency_margin)
+
+    # --- CPM ---
+    st.markdown("### CPM — Cost per 1,000 Views")
     st.write(
         f"""
-        **Result:** {metrics.calculate_CPM(client_cost)}  
-        Measures cost efficiency of reach. Lower CPM = better value for brands.
+        **Result:** R{cpm}  
+        **Industry Benchmark:** {benchmarks['CPM']}
+
+        **What this means:**  
+        CPM measures how much a brand pays to reach 1,000 viewers.  
+        Lower CPM = more cost-efficient reach.
+
+        **Interpretation:**  
+        {"This creator is cost-efficient relative to market averages." if cpm < 150 else "This creator is priced above average and should justify cost through engagement or niche value."}
         """
     )
 
-    st.markdown("### CPV — Cost Per View")
+    # --- CPV ---
+    st.markdown("### CPV — Cost per View")
     st.write(
         f"""
-        **Result:** {metrics.calculate_CPV(client_cost)}  
-        Shows how much each individual view costs. Useful for awareness campaigns.
+        **Result:** R{cpv}  
+        **Industry Benchmark:** {benchmarks['CPV']}
+
+        **What this means:**  
+        CPV shows the cost of each individual view generated.
+
+        **Interpretation:**  
+        {"Strong value per view." if cpv <= 0.30 else "Higher cost per view — brand should assess targeting or audience relevance."}
         """
     )
 
-    st.markdown("### CPE — Cost Per Engagement")
+    # --- CPE ---
+    st.markdown("### CPE — Cost per Engagement")
     st.write(
         f"""
-        **Result:** {metrics.calculate_CPE(client_cost)}  
-        Indicates engagement efficiency. Lower CPE suggests stronger audience interaction.
+        **Result:** R{cpe}  
+        **Industry Benchmark:** {benchmarks['CPE']}
+
+        **What this means:**  
+        CPE measures how much a brand pays for each like or comment.
+        This is critical for campaigns focused on interaction and brand recall.
+
+        **Interpretation:**  
+        {"Efficient engagement generation." if cpe <= 5 else "Engagement is relatively expensive — may suit awareness more than interaction campaigns."}
         """
     )
 
+    # --- Engagement-Adjusted CPM ---
     st.markdown("### Engagement-Adjusted CPM")
     st.write(
         f"""
-        **Result:** {metrics.calculate_engagement_adjusted_CPM(client_cost)}  
-        Adjusts CPM based on engagement quality — rewards creators with active audiences.
+        **Result:** R{eng_adj_cpm}  
+        **Benchmark Guidance:** {benchmarks['Engagement Adjusted CPM']}
+
+        **What this means:**  
+        This adjusts CPM based on how actively viewers engage with content.
+
+        **Interpretation:**  
+        {"High engagement strengthens the value of impressions delivered." if eng_adj_cpm < cpm else "Engagement does not significantly enhance impression value."}
         """
     )
 
+    # --- Talent Cost ---
     st.markdown("### Talent Cost (After Agency Margin)")
     st.write(
         f"""
-        **Result:** {metrics.calculate_talent_cost(client_cost, agency_margin):,.2f}  
-        Net payout to creator after agency margin.
+        **Result:** R{talent_cost}
+
+        **What this means:**  
+        This is the estimated payout to the creator after agency margin.
+
+        **Why it matters:**  
+        Helps agencies evaluate margin sustainability and creator fairness.
         """
     )
-
-
-    # ---------------- CSV EXPORT ----------------
-    st.subheader("Export Report")
-    export_df = pd.DataFrame([{
-        **report,
-        "CPM": metrics.calculate_CPM(client_cost),
-        "CPV": metrics.calculate_CPV(client_cost),
-        "CPE": metrics.calculate_CPE(client_cost),
-        "Talent Cost": metrics.calculate_talent_cost(client_cost, agency_margin),
-        "Dashboard Score": metrics.dashboard_score,
-    }])
-
-    st.download_button(
-        "Download CSV (Sheets-ready)",
-        export_df.to_csv(index=False),
-        file_name=f"{channel['channel_name']}_report.csv",
-        mime="text/csv"
-    )
-
-else:
-    st.info("Enter a channel and campaign details to begin.")
 
 
 
