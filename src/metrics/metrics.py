@@ -5,7 +5,7 @@ Advanced YouTube influencer metrics for performance analysis, monetisation, and 
 import statistics
 import isodate
 from datetime import datetime, timedelta, timezone
-from ai.openai_utils import get_ai_score
+from src.ai.openai_utils import get_ai_score
 import os
 from dotenv import load_dotenv
 
