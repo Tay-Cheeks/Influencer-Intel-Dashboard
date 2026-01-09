@@ -11,7 +11,10 @@ load_dotenv()
 YT_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 if not YT_API_KEY:
-    raise ValueError("You must set YOUTUBE_API_KEY in your .env file")
+    raise ValueError(
+        "YOUTUBE_API_KEY not found. "
+        "Set it in Streamlit Cloud → App Settings → Secrets."
+    )
 
 #Create the YouTube API client
 youtube = build("youtube", "v3", developerKey=YT_API_KEY)
