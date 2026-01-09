@@ -6,7 +6,7 @@ import json
 
 from src.youtube.client import get_channel_stats, get_recent_videos
 from src.metrics.metrics import InfluencerMetrics
-from src.analyser.analyser import build_analysis, get_creator_tier
+from src.analysis.analyser import build_analysis, get_creator_tier
 
 # ---------------- STREAMLIT CONFIG ----------------
 st.set_page_config(
