@@ -246,17 +246,20 @@ if run and creator_url:
     viral_skew = skew_ratio >= 1.3
 
     # ----------------------------
-    # Zoom & scroll interaction
+    # Y-axis zoom only (X locked)
     # ----------------------------
-    zoom = alt.selection_interval(bind="scales")
+    y_zoom = alt.selection_interval(
+        bind="scales",
+        encodings=["y"]  # 👈 ONLY Y-axis scroll/zoom
+    )
 
     # ----------------------------
-    # Bars (slightly thicker)
+    # Bars (proper spacing)
     # ----------------------------
     bars = (
         alt.Chart(views_df)
         .mark_bar(
-            size=34,  # 👈 thicker bars (default ~20)
+            size=30,  # thickness
             cornerRadiusTopLeft=4,
             cornerRadiusTopRight=4
         )
@@ -264,7 +267,10 @@ if run and creator_url:
             x=alt.X(
                 "published_date:T",
                 title="Published Date",
-                axis=alt.Axis(labelAngle=0)
+                scale=alt.Scale(
+                    paddingInner=0.4,  # 👈 spacing between bars
+                    paddingOuter=0.2
+                )
             ),
             y=alt.Y(
                 "views:Q",
@@ -312,13 +318,11 @@ if run and creator_url:
     # Skew shading (only if detected)
     # ----------------------------
     if viral_skew:
-        shade_df = pd.DataFrame({
-            "y1": [median_views],
-            "y2": [avg_views]
-        })
-
         skew_shade = (
-            alt.Chart(shade_df)
+            alt.Chart(pd.DataFrame({
+                "y1": [median_views],
+                "y2": [avg_views]
+            }))
             .mark_rect(opacity=0.12, color="#F59E0B")
             .encode(
                 y="y1:Q",
@@ -329,11 +333,11 @@ if run and creator_url:
         skew_shade = alt.Chart(pd.DataFrame()).mark_rect()
 
     # ----------------------------
-    # Combine chart + interaction
+    # Combine chart
     # ----------------------------
     views_chart = (
         (skew_shade + bars + avg_line + median_line)
-        .add_selection(zoom)  # 👈 THIS enables zoom & scroll
+        .add_selection(y_zoom)  # 👈 vertical scroll works
         .properties(height=380)
         .configure_axis(
             grid=True,
@@ -350,18 +354,18 @@ if run and creator_url:
     # ----------------------------
     if viral_skew:
         st.warning(
-            "📈 **Viral skew detected** — Average views are significantly higher than median views. "
-            "This suggests performance is driven by a small number of breakout videos."
+            "📈 **Viral skew detected** — A small number of videos are driving "
+            "a disproportionate share of total views."
         )
     else:
         st.info(
-            "Performance is evenly distributed — average and median views are closely aligned, "
-            "indicating consistent audience response."
+            "Performance is evenly distributed — audience response is consistent "
+            "across uploads."
         )
 
     st.caption(
-        "Scroll to zoom, drag to pan. Bars are ordered from oldest to newest upload. "
-        "Dashed lines show average (green) and median (red) views."
+        "Use mouse scroll to zoom the Y-axis (views). "
+        "Bars are spaced chronologically from oldest to newest."
     )
 
 
