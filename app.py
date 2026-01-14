@@ -234,16 +234,19 @@ if run and creator_url:
     views_df = (
         views_df.sort_values("published_date", ascending=True)
         .tail(8)
+        .reset_index(drop=True)
     )
 
-    views_df["date"] = views_df["published_date"].dt.strftime("%d %b %Y")
+    # Create helper fields
+    views_df["date_label"] = views_df["published_date"].dt.strftime("%d %b %Y")
+    views_df["x_order"] = views_df.index.astype(str)
 
     avg_views = views_df["views"].mean()
     median_views = views_df["views"].median()
 
-    # Detect viral skew (mean significantly higher than median)
+    # Detect viral skew
     skew_ratio = avg_views / median_views if median_views else 0
-    viral_skew = skew_ratio >= 1.3  # threshold you can tune
+    viral_skew = skew_ratio >= 1.3
 
     # ----------------------------
     # Bars
@@ -256,9 +259,9 @@ if run and creator_url:
         )
         .encode(
             x=alt.X(
-                "date:N",
-                title="Upload Date",
-                sort=None
+                "x_order:N",
+                title="Upload Order (Oldest → Newest)",
+                axis=alt.Axis(labelAngle=0)
             ),
             y=alt.Y(
                 "views:Q",
@@ -267,7 +270,7 @@ if run and creator_url:
             ),
             tooltip=[
                 alt.Tooltip("title:N", title="Video"),
-                alt.Tooltip("date:N", title="Published"),
+                alt.Tooltip("date_label:N", title="Published"),
                 alt.Tooltip("views:Q", title="Views", format=",")
             ],
             color=alt.value("#4F46E5")
@@ -275,22 +278,44 @@ if run and creator_url:
     )
 
     # ----------------------------
-    # Average & Median lines
+    # Average & Median lines with tooltips
     # ----------------------------
+    avg_df = pd.DataFrame({
+        "label": ["Average Views"],
+        "value": [avg_views]
+    })
+
+    median_df = pd.DataFrame({
+        "label": ["Median Views"],
+        "value": [median_views]
+    })
+
     avg_line = (
-        alt.Chart(pd.DataFrame({"y": [avg_views]}))
+        alt.Chart(avg_df)
         .mark_rule(strokeDash=[6, 4], color="#16A34A", strokeWidth=2)
-        .encode(y="y:Q")
+        .encode(
+            y="value:Q",
+            tooltip=[
+                alt.Tooltip("label:N"),
+                alt.Tooltip("value:Q", format=",")
+            ]
+        )
     )
 
     median_line = (
-        alt.Chart(pd.DataFrame({"y": [median_views]}))
+        alt.Chart(median_df)
         .mark_rule(strokeDash=[2, 2], color="#DC2626", strokeWidth=2)
-        .encode(y="y:Q")
+        .encode(
+            y="value:Q",
+            tooltip=[
+                alt.Tooltip("label:N"),
+                alt.Tooltip("value:Q", format=",")
+            ]
+        )
     )
 
     # ----------------------------
-    # Skew shading (only if viral skew detected)
+    # Skew shading (only if detected)
     # ----------------------------
     if viral_skew:
         shade_df = pd.DataFrame({
@@ -326,13 +351,12 @@ if run and creator_url:
     st.altair_chart(views_chart, use_container_width=True)
 
     # ----------------------------
-    # Explanation & badge
+    # Explanation
     # ----------------------------
     if viral_skew:
         st.warning(
-            "📈 **Viral Skew Detected** — A small number of high-performing videos "
-            "are pulling the average above the median. Median views are a more reliable "
-            "indicator of expected performance."
+            "📈 **Viral skew detected** — Average views are significantly higher than median views. "
+            "This suggests performance is driven by a small number of breakout videos."
         )
     else:
         st.info(
@@ -341,8 +365,8 @@ if run and creator_url:
         )
 
     st.caption(
-        "Bars are ordered chronologically from oldest to newest. "
-        "The shaded area (when present) highlights performance skew caused by viral spikes."
+        "Bars are ordered from oldest to newest upload. "
+        "Dashed lines show average (green) and median (red) views."
     )
 
 
