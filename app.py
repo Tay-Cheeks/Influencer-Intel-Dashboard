@@ -234,41 +234,34 @@ if run and creator_url:
     views_df = views_df.dropna(subset=["views", "title", "published_date"])
     views_df = views_df.sort_values("published_date", ascending=True).tail(8).reset_index(drop=True)
 
-    # Add helper fields
     views_df["date_label"] = views_df["published_date"].dt.strftime("%d %b %Y")
     views_df["x_order"] = views_df.index.astype(str)
 
     # Metrics
     avg_views = views_df["views"].mean()
     median_views = views_df["views"].median()
-
-    # Viral skew detection
     skew_ratio = avg_views / median_views if median_views else 0
     viral_skew = skew_ratio >= 1.3
 
     # ----------------------------
-    # Bars
+    # Bars (always rendered)
     # ----------------------------
     bars = (
         alt.Chart(views_df)
-        .mark_bar(size=40, cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_bar(size=45, cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
             x=alt.X(
                 "x_order:N",
                 title="Upload Order (Oldest → Newest)",
-                axis=alt.Axis(labels=False, ticks=False, labelAngle=0)
+                axis=alt.Axis(labels=False, ticks=False)
             ),
-            y=alt.Y(
-                "views:Q",
-                title="Views",
-                axis=alt.Axis(format="~s")
-            ),
+            y=alt.Y("views:Q", title="Views", axis=alt.Axis(format="~s")),
+            color=alt.value("#4F46E5"),
             tooltip=[
                 alt.Tooltip("title:N", title="Video"),
                 alt.Tooltip("date_label:N", title="Published"),
                 alt.Tooltip("views:Q", title="Views", format=",")
-            ],
-            color=alt.value("#4F46E5")
+            ]
         )
     )
 
@@ -280,7 +273,7 @@ if run and creator_url:
         .mark_rule(strokeDash=[6,4], color="#16A34A", strokeWidth=2)
         .encode(
             y="value:Q",
-            tooltip=[alt.Tooltip("value:Q", format=",.0f", title="Average Views")]
+            tooltip=[alt.Tooltip("value:Q", format=",", title="Average Views")]
         )
     )
 
@@ -289,29 +282,39 @@ if run and creator_url:
         .mark_rule(strokeDash=[2,2], color="#DC2626", strokeWidth=2)
         .encode(
             y="value:Q",
-            tooltip=[alt.Tooltip("value:Q", format=",.0f", title="Median Views")]
+            tooltip=[alt.Tooltip("value:Q", format=",", title="Median Views")]
         )
     )
 
     # ----------------------------
-    # Viral skew shading
+    # Viral skew shading behind bars
     # ----------------------------
     if viral_skew:
+        shade_df = pd.DataFrame({
+            "x_order": views_df["x_order"],
+            "y_min": median_views,
+            "y_max": avg_views
+        })
+
         skew_shade = (
-            alt.Chart(pd.DataFrame({"y1": [median_views], "y2": [avg_views]}))
-            .mark_rect(opacity=0.12, color="#F59E0B")
-            .encode(y="y1:Q", y2="y2:Q", x=alt.value(0), x2=alt.value(len(views_df)))
+            alt.Chart(shade_df)
+            .mark_area(opacity=0.12, color="#F59E0B")
+            .encode(
+                x="x_order:N",
+                y="y_min:Q",
+                y2="y_max:Q"
+            )
         )
     else:
-        skew_shade = alt.Chart(pd.DataFrame()).mark_rect()
+        skew_shade = alt.Chart(pd.DataFrame({"x_order": []})).mark_area()
 
     # ----------------------------
-    # Combine chart
+    # Combine chart (bars on top)
     # ----------------------------
     views_chart = (
         (skew_shade + bars + avg_line + median_line)
         .properties(height=380)
-        .interactive(bind_y=True)  # zoom & scroll on Y-axis
+        .interactive(bind_y=True)  # allows Y-axis scroll & zoom
         .configure_axis(
             grid=True,
             gridOpacity=0.15,
@@ -328,7 +331,7 @@ if run and creator_url:
     if viral_skew:
         st.warning(
             "📈 **Viral skew detected** — Average views are significantly higher than median views. "
-            "This suggests performance is driven by a few breakout videos."
+            "Performance is driven by a few breakout videos, but all video bars are shown above."
         )
     else:
         st.info(
