@@ -290,8 +290,6 @@ if run and creator_url:
     st.caption("Scroll or drag to zoom and pan. Bars are oldest → newest upload. Dashed lines: avg (green) & median (red). Hover for details or click the top-right table icon for data view.")
 
 
-
-
     # ---------------- LIKES vs COMMENTS CHART ---------------
     st.subheader("Engagement Breakdown")
 
