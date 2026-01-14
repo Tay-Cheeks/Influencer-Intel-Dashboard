@@ -8,16 +8,16 @@ from src.metrics.metrics import InfluencerMetrics
 from src.analysis.analyser import get_creator_tier
 
 # ---------------- THEME TOGGLE ----------------
-theme = st.sidebar.radio("Theme", ["Light", "Dark"])
-if theme == "Dark":
-    alt.themes.enable("dark")
-else:
-    alt.themes.enable("light")
+# theme = st.sidebar.radio("Theme", ["Light", "Dark"])
+# if theme == "Dark":
+#     alt.themes.enable("dark")
+# else:
+#     alt.themes.enable("light")
 
-st.set_page_config(page_title="Influencer Intel Dashboard", layout="wide")
+# st.set_page_config(page_title="Influencer Intel Dashboard", layout="wide")
 
-st.title("Influencer Intel Dashboard")
-st.caption("Performance • Engagement • Monetisation")
+# st.title("Influencer Intel Dashboard")
+# st.caption("Performance • Engagement • Monetisation")
 
 # ---------------- INPUTS ----------------
 with st.sidebar:
@@ -219,32 +219,36 @@ if run and creator_url:
     st.subheader("Views per Recent Video")
 
     # ----------------------------
-    # Data safety & preparation
+    # Data preparation
     # ----------------------------
-    views_df = df.copy()  # Use existing df
+    views_df = df.copy()
 
-    # Ensure correct dtypes
     views_df["views"] = pd.to_numeric(views_df["views"], errors="coerce")
     views_df["published_date"] = pd.to_datetime(
         views_df["published_date"], errors="coerce"
     )
 
-    # Drop broken rows
     views_df = views_df.dropna(subset=["views", "title", "published_date"])
 
-    # Sort newest → oldest
-    views_df = views_df.sort_values("published_date", ascending=False)
+    # Sort oldest → newest and keep most recent 8
+    views_df = (
+        views_df.sort_values("published_date", ascending=True)
+        .tail(8)
+    )
 
-    # Limit to most recent 8
-    views_df = views_df.head(8)
-
-    # Create readable date
     views_df["date"] = views_df["published_date"].dt.strftime("%d %b %Y")
 
+    avg_views = views_df["views"].mean()
+    median_views = views_df["views"].median()
+
+    # Detect viral skew (mean significantly higher than median)
+    skew_ratio = avg_views / median_views if median_views else 0
+    viral_skew = skew_ratio >= 1.3  # threshold you can tune
+
     # ----------------------------
-    # Altair Bar Chart
+    # Bars
     # ----------------------------
-    views_chart = (
+    bars = (
         alt.Chart(views_df)
         .mark_bar(
             cornerRadiusTopLeft=4,
@@ -252,10 +256,9 @@ if run and creator_url:
         )
         .encode(
             x=alt.X(
-                "title:N",
-                sort="-y",
-                title="Video",
-                axis=alt.Axis(labelLimit=120)
+                "date:N",
+                title="Upload Date",
+                sort=None
             ),
             y=alt.Y(
                 "views:Q",
@@ -267,12 +270,51 @@ if run and creator_url:
                 alt.Tooltip("date:N", title="Published"),
                 alt.Tooltip("views:Q", title="Views", format=",")
             ],
-            color=alt.value("#4F46E5")  # Indigo
+            color=alt.value("#4F46E5")
         )
-        .properties(
-            height=360,
-            width="container"
+    )
+
+    # ----------------------------
+    # Average & Median lines
+    # ----------------------------
+    avg_line = (
+        alt.Chart(pd.DataFrame({"y": [avg_views]}))
+        .mark_rule(strokeDash=[6, 4], color="#16A34A", strokeWidth=2)
+        .encode(y="y:Q")
+    )
+
+    median_line = (
+        alt.Chart(pd.DataFrame({"y": [median_views]}))
+        .mark_rule(strokeDash=[2, 2], color="#DC2626", strokeWidth=2)
+        .encode(y="y:Q")
+    )
+
+    # ----------------------------
+    # Skew shading (only if viral skew detected)
+    # ----------------------------
+    if viral_skew:
+        shade_df = pd.DataFrame({
+            "y1": [median_views],
+            "y2": [avg_views]
+        })
+
+        skew_shade = (
+            alt.Chart(shade_df)
+            .mark_rect(opacity=0.12, color="#F59E0B")
+            .encode(
+                y="y1:Q",
+                y2="y2:Q"
+            )
         )
+    else:
+        skew_shade = alt.Chart(pd.DataFrame()).mark_rect()
+
+    # ----------------------------
+    # Combine chart
+    # ----------------------------
+    views_chart = (
+        (skew_shade + bars + avg_line + median_line)
+        .properties(height=380)
         .configure_axis(
             grid=True,
             gridOpacity=0.15,
@@ -283,11 +325,25 @@ if run and creator_url:
 
     st.altair_chart(views_chart, use_container_width=True)
 
-    st.caption(
-        "This chart shows views for the creator’s most recent uploads. "
-        "Hover over each bar to see the video title, publish date, and exact views."
-    )
+    # ----------------------------
+    # Explanation & badge
+    # ----------------------------
+    if viral_skew:
+        st.warning(
+            "📈 **Viral Skew Detected** — A small number of high-performing videos "
+            "are pulling the average above the median. Median views are a more reliable "
+            "indicator of expected performance."
+        )
+    else:
+        st.info(
+            "Performance is evenly distributed — average and median views are closely aligned, "
+            "indicating consistent audience response."
+        )
 
+    st.caption(
+        "Bars are ordered chronologically from oldest to newest. "
+        "The shaded area (when present) highlights performance skew caused by viral spikes."
+    )
 
 
     # ---------------- LIKES vs COMMENTS CHART ---------------
