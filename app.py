@@ -291,7 +291,7 @@ if run and creator_url:
             .encode(
                 x=alt.X(
                     "views:Q",
-                    bin=alt.Bin(maxbins=8),
+                    bin=alt.Bin(maxbins=20),
                     title="Views per Video",
                     axis=alt.Axis(format="~s")
                 ),
