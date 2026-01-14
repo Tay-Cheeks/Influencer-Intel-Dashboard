@@ -251,35 +251,122 @@ if run and creator_url:
     st.altair_chart(views_chart, use_container_width=True)
 
     
-    st.subheader("View Distribution & Volatility")
-
-    dist_chart = (
-        alt.Chart(views_df)
-        .mark_boxplot(extent="min-max")
-        .encode(
-            y=alt.Y("views:Q", title="Views", axis=alt.Axis(format="~s"))
-        )
-        .properties(height=280)
+    # ---------------- VIEW DISTRIBUTION ----------------
+    st.subheader("View Distribution (Consistency vs Virality)")
+    st.caption(
+        """
+        This chart shows how views are distributed across recent videos.
+        It helps identify whether performance is consistent or driven by a few viral outliers.
+        """
     )
 
-    st.altair_chart(dist_chart, use_container_width=True)
+    # ----------------------------
+    # Data preparation
+    # ----------------------------
+    views_df = df.copy()
 
-    avg_views = views_df["views"].mean()
-    median_views = views_df["views"].median()
+    views_df["views"] = pd.to_numeric(views_df["views"], errors="coerce")
+    views_df = views_df.dropna(subset=["views"])
 
-    skew_ratio = avg_views / median_views if median_views else 0
-
-    if skew_ratio >= 1.3:
-        st.warning(
-            f"📈 **Viral skew detected** — Average views ({avg_views:,.0f}) "
-            f"are significantly higher than median views ({median_views:,.0f}). "
-            "Performance is driven by a small number of breakout videos."
-        )
+    # Safety: ensure at least 2 data points
+    if len(views_df) < 2:
+        st.info("Not enough data to analyse view distribution.")
     else:
-        st.info(
-            "View distribution is balanced — average and median views are closely aligned, "
-            "indicating consistent performance."
+        avg_views = views_df["views"].mean()
+        median_views = views_df["views"].median()
+
+        skew_ratio = avg_views / median_views if median_views else 0
+        viral_skew = skew_ratio >= 1.3
+
+        # ----------------------------
+        # Histogram
+        # ----------------------------
+        hist = (
+            alt.Chart(views_df)
+            .mark_bar(
+                cornerRadiusTopLeft=3,
+                cornerRadiusTopRight=3,
+                color="#6366F1"
+            )
+            .encode(
+                x=alt.X(
+                    "views:Q",
+                    bin=alt.Bin(maxbins=8),
+                    title="Views per Video",
+                    axis=alt.Axis(format="~s")
+                ),
+                y=alt.Y(
+                    "count():Q",
+                    title="Number of Videos"
+                ),
+                tooltip=[
+                    alt.Tooltip("count():Q", title="Videos in Range")
+                ]
+            )
+            .properties(height=280)
+            .interactive()  # zoom & pan like engagement chart
         )
+
+        # ----------------------------
+        # Median reference line
+        # ----------------------------
+        median_line = (
+            alt.Chart(pd.DataFrame({"median": [median_views]}))
+            .mark_rule(
+                color="#DC2626",
+                strokeDash=[4, 4],
+                strokeWidth=2
+            )
+            .encode(
+                x="median:Q",
+                tooltip=[
+                    alt.Tooltip("median:Q", title="Median Views", format=",")
+                ]
+            )
+        )
+
+        st.altair_chart(hist + median_line, use_container_width=True)
+
+        # ----------------------------
+        # Interpretation
+        # ----------------------------
+        if viral_skew:
+            st.warning(
+                f"""
+                📈 **Viral-driven performance detected**
+
+                • **Median views:** {median_views:,.0f}  
+                • **Average views:** {avg_views:,.0f}
+
+                Most videos cluster around the median, while a small number of
+                breakout videos inflate the average.
+
+                **What this means for brands:**  
+                Reach is possible, but results are less predictable and depend
+                on viral momentum rather than consistent delivery.
+                """
+            )
+        else:
+            st.info(
+                f"""
+                ✅ **Consistent performance profile**
+
+                • **Median views:** {median_views:,.0f}  
+                • **Average views:** {avg_views:,.0f}
+
+                Views are evenly distributed, meaning most videos perform
+                close to the average.
+
+                **What this means for brands:**  
+                More reliable reach, lower risk, and predictable outcomes.
+                """
+            )
+
+        st.caption(
+            "Each bar represents how many videos fall into a specific view range. "
+            "The red dashed line shows the median — where typical performance sits."
+        )
+
     
     # # ---------------- VIDEO VIEWS CHART ---------------------
     # st.subheader("Views per Recent Video")
