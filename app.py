@@ -300,7 +300,7 @@ if run and creator_url:
         skew_shade = (
             alt.Chart(pd.DataFrame({"y1": [median_views], "y2": [avg_views]}))
             .mark_rect(opacity=0.12, color="#F59E0B")
-            .encode(y="y1:Q", y2="y2:Q", x=alt.value(0), x2=alt.value(len(views_df)))
+            .encode(y="y1:Q", y2="y2:Q") #, x=alt.value(0), x2=alt.value(len(views_df))
         )
     else:
         skew_shade = alt.Chart(pd.DataFrame()).mark_rect()
