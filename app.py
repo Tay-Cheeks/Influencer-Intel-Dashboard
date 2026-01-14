@@ -219,49 +219,59 @@ if run and creator_url:
     # ---------------- VIDEO VIEWS CHART ---------------------
     st.subheader("Views per Recent Video")
     st.caption(
-        "Bars show views for the 8 most recent videos (oldest → newest). "
-        "Green dashed line = average views, red dashed line = median views. "
-        "Shaded area indicates viral skew when average ≫ median."
+        "This chart shows view performance for the creator’s 8 most recent uploads. "
+        "Bars represent individual videos, while dashed lines indicate average and median views. "
+        "Shaded area appears when performance is driven by viral outliers."
     )
 
     # ----------------------------
-    # Data preparation
+    # Data preparation (ROBUST)
     # ----------------------------
     views_df = df.copy()
+
     views_df["views"] = pd.to_numeric(views_df["views"], errors="coerce")
-    views_df["published_date"] = pd.to_datetime(views_df["published_date"], errors="coerce")
+    views_df["published_date"] = pd.to_datetime(
+        views_df["published_date"], errors="coerce"
+    )
 
     views_df = views_df.dropna(subset=["views", "title", "published_date"])
-    views_df = views_df.sort_values("published_date", ascending=True).tail(8).reset_index(drop=True)
+
+    # Oldest → newest, keep last 8
+    views_df = (
+        views_df.sort_values("published_date", ascending=True)
+        .tail(8)
+        .reset_index(drop=True)
+    )
 
     views_df["date_label"] = views_df["published_date"].dt.strftime("%d %b %Y")
-    views_df["x_order"] = views_df.index.astype(str)
-
-    # Metrics
-    avg_views = views_df["views"].mean()
-    median_views = views_df["views"].median()
-    skew_ratio = avg_views / median_views if median_views else 0
-    viral_skew = skew_ratio >= 1.3
+    views_df["order"] = views_df.index.astype(str)
 
     # ----------------------------
-    # Bars (always rendered)
+    # Metrics
+    # ----------------------------
+    avg_views = views_df["views"].mean()
+    median_views = views_df["views"].median()
+    viral_skew = avg_views >= (median_views * 1.3 if median_views else 0)
+
+    # ----------------------------
+    # Bars (ALWAYS visible)
     # ----------------------------
     bars = (
         alt.Chart(views_df)
-        .mark_bar(size=45, cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_bar(size=42)
         .encode(
             x=alt.X(
-                "x_order:N",
+                "order:N",
                 title="Upload Order (Oldest → Newest)",
-                axis=alt.Axis(labels=False, ticks=False)
+                axis=alt.Axis(labelAngle=0, ticks=False)
             ),
             y=alt.Y("views:Q", title="Views", axis=alt.Axis(format="~s")),
-            color=alt.value("#4F46E5"),
             tooltip=[
                 alt.Tooltip("title:N", title="Video"),
                 alt.Tooltip("date_label:N", title="Published"),
                 alt.Tooltip("views:Q", title="Views", format=",")
-            ]
+            ],
+            color=alt.value("#4F46E5")
         )
     )
 
@@ -270,51 +280,51 @@ if run and creator_url:
     # ----------------------------
     avg_line = (
         alt.Chart(pd.DataFrame({"value": [avg_views]}))
-        .mark_rule(strokeDash=[6,4], color="#16A34A", strokeWidth=2)
+        .mark_rule(color="#16A34A", strokeDash=[6,4], strokeWidth=2)
         .encode(
             y="value:Q",
-            tooltip=[alt.Tooltip("value:Q", format=",", title="Average Views")]
+            tooltip=[alt.Tooltip("value:Q", title="Average Views", format=",")]
         )
     )
 
     median_line = (
         alt.Chart(pd.DataFrame({"value": [median_views]}))
-        .mark_rule(strokeDash=[2,2], color="#DC2626", strokeWidth=2)
+        .mark_rule(color="#DC2626", strokeDash=[2,2], strokeWidth=2)
         .encode(
             y="value:Q",
-            tooltip=[alt.Tooltip("value:Q", format=",", title="Median Views")]
+            tooltip=[alt.Tooltip("value:Q", title="Median Views", format=",")]
         )
     )
 
     # ----------------------------
-    # Viral skew shading behind bars
+    # Viral skew shading (SAFE)
     # ----------------------------
     if viral_skew:
-        shade_df = pd.DataFrame({
-            "x_order": views_df["x_order"],
-            "y_min": median_views,
-            "y_max": avg_views
+        skew_df = pd.DataFrame({
+            "order": views_df["order"],
+            "low": median_views,
+            "high": avg_views
         })
 
-        skew_shade = (
-            alt.Chart(shade_df)
+        skew_area = (
+            alt.Chart(skew_df)
             .mark_area(opacity=0.12, color="#F59E0B")
             .encode(
-                x="x_order:N",
-                y="y_min:Q",
-                y2="y_max:Q"
+                x="order:N",
+                y="low:Q",
+                y2="high:Q"
             )
         )
     else:
-        skew_shade = alt.Chart(pd.DataFrame({"x_order": []})).mark_area()
+        skew_area = alt.Chart(pd.DataFrame()).mark_area()
 
     # ----------------------------
-    # Combine chart (bars on top)
+    # Combine (NO fragile interactivity)
     # ----------------------------
     views_chart = (
-        (skew_shade + bars + avg_line + median_line)
+        (skew_area + bars + avg_line + median_line)
         .properties(height=380)
-        .interactive(bind_y=True)  # allows Y-axis scroll & zoom
+        .interactive()  # SAME as Engagement Breakdown
         .configure_axis(
             grid=True,
             gridOpacity=0.15,
@@ -326,24 +336,24 @@ if run and creator_url:
     st.altair_chart(views_chart, use_container_width=True)
 
     # ----------------------------
-    # Explanation / Viral badge
+    # Explanation
     # ----------------------------
     if viral_skew:
         st.warning(
             "📈 **Viral skew detected** — Average views are significantly higher than median views. "
-            "Performance is driven by a few breakout videos, but all video bars are shown above."
+            "This indicates that a small number of breakout videos are driving overall performance."
         )
     else:
         st.info(
             "Performance is evenly distributed — average and median views are closely aligned, "
-            "indicating consistent audience response."
+            "indicating consistent audience engagement across videos."
         )
 
     st.caption(
-        "Hover over bars to see video title, publish date, and views. "
-        "Use the mouse wheel or trackpad to zoom/scroll vertically. "
-        "Bars are spaced evenly from oldest → newest upload."
+        "Hover over bars for video details. "
+        "Use the chart menu (top-right) to view data as a table or export."
     )
+
 
 
     # ---------------- LIKES vs COMMENTS CHART ---------------
