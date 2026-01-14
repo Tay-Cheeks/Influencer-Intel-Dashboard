@@ -238,39 +238,33 @@ if run and creator_url:
         .reset_index(drop=True)
     )
 
+    # Create categorical x-axis to prevent overlap
+    views_df["video_order"] = views_df["title"]
+
+    # Avg & Median
     avg_views = views_df["views"].mean()
     median_views = views_df["views"].median()
 
-    # Detect viral skew
+    # Viral skew detection
     skew_ratio = avg_views / median_views if median_views else 0
     viral_skew = skew_ratio >= 1.3
 
     # ----------------------------
-    # Y-axis zoom only (X locked)
-    # ----------------------------
-    y_zoom = alt.selection_interval(
-        bind="scales",
-        encodings=["y"]  # 👈 ONLY Y-axis scroll/zoom
-    )
-
-    # ----------------------------
-    # Bars (proper spacing)
+    # Bars (categorical X like engagement chart)
     # ----------------------------
     bars = (
         alt.Chart(views_df)
         .mark_bar(
-            size=30,  # thickness
+            size=32,  # 👈 thicker but clean
             cornerRadiusTopLeft=4,
             cornerRadiusTopRight=4
         )
         .encode(
             x=alt.X(
-                "published_date:T",
-                title="Published Date",
-                scale=alt.Scale(
-                    paddingInner=0.4,  # 👈 spacing between bars
-                    paddingOuter=0.2
-                )
+                "video_order:N",
+                title="Video (Oldest → Newest)",
+                sort=None,  # preserve dataframe order
+                axis=alt.Axis(labelLimit=120)
             ),
             y=alt.Y(
                 "views:Q",
@@ -279,6 +273,7 @@ if run and creator_url:
             ),
             tooltip=[
                 alt.Tooltip("title:N", title="Video"),
+                alt.Tooltip("published_date:T", title="Published"),
                 alt.Tooltip("views:Q", title="Views", format=",")
             ],
             color=alt.value("#4F46E5")
@@ -315,7 +310,7 @@ if run and creator_url:
     )
 
     # ----------------------------
-    # Skew shading (only if detected)
+    # Skew shading
     # ----------------------------
     if viral_skew:
         skew_shade = (
@@ -333,12 +328,12 @@ if run and creator_url:
         skew_shade = alt.Chart(pd.DataFrame()).mark_rect()
 
     # ----------------------------
-    # Combine chart
+    # Combine & INTERACTIVITY (same as engagement)
     # ----------------------------
     views_chart = (
         (skew_shade + bars + avg_line + median_line)
-        .add_selection(y_zoom)  # 👈 vertical scroll works
         .properties(height=380)
+        .interactive()  # 👈 THIS is the magic (same as engagement)
         .configure_axis(
             grid=True,
             gridOpacity=0.15,
@@ -354,18 +349,18 @@ if run and creator_url:
     # ----------------------------
     if viral_skew:
         st.warning(
-            "📈 **Viral skew detected** — A small number of videos are driving "
-            "a disproportionate share of total views."
+            "📈 **Viral skew detected** — Average views are significantly higher than median views, "
+            "indicating performance is driven by a small number of breakout videos."
         )
     else:
         st.info(
-            "Performance is evenly distributed — audience response is consistent "
-            "across uploads."
+            "Performance is evenly distributed — average and median views are closely aligned, "
+            "indicating consistent audience response."
         )
 
     st.caption(
-        "Use mouse scroll to zoom the Y-axis (views). "
-        "Bars are spaced chronologically from oldest to newest."
+        "Scroll or drag to zoom and pan the chart. "
+        "Bars are ordered from oldest to newest upload."
     )
 
 
