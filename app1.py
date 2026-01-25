@@ -166,9 +166,16 @@ if run and creator_url:
 
     fee_delta = client_cost - recommended_fee_client
     fee_delta_pct = (fee_delta / recommended_fee_client) * 100 if recommended_fee_client else 0
+
+    if report.get("risk_level") == "Low (Consistent)":
+        confidence = "High"
+    elif report.get("risk_level") == "Moderate":
+        confidence = "Medium"
+    else:
+        confidence = "Low"
+
     if value_verdict == "Overpriced":
         decision_headline = "Verdict: Overpriced for this campaign"
-        decision_action = "Recommended action: Negotiate down or choose a different creator."
         decision_sentence = (
             f"Based on {expected_views_method.lower()} ({int(expected_views):,}) and a target CPM of "
             f"{_currency_symbol(client_currency)}{target_cpm:,.2f}, the quoted fee is above the recommended fee."
@@ -177,7 +184,6 @@ if run and creator_url:
         hero_bg = "#FEF2F2"
     elif value_verdict == "Great value":
         decision_headline = "Verdict: Great value for this campaign"
-        decision_action = "Recommended action: Proceed (value is strong)."
         decision_sentence = (
             f"Based on {expected_views_method.lower()} ({int(expected_views):,}) and a target CPM of "
             f"{_currency_symbol(client_currency)}{target_cpm:,.2f}, the quoted fee is below the recommended fee."
@@ -186,7 +192,6 @@ if run and creator_url:
         hero_bg = "#F0FDF4"
     else:
         decision_headline = "Verdict: Fairly priced for this campaign"
-        decision_action = "Recommended action: Proceed if the creator fit is right."
         decision_sentence = (
             f"Based on {expected_views_method.lower()} ({int(expected_views):,}) and a target CPM of "
             f"{_currency_symbol(client_currency)}{target_cpm:,.2f}, the quoted fee is close to the recommended fee."
@@ -196,39 +201,41 @@ if run and creator_url:
 
     st.markdown(
         f"""
-        <div style="border:1px solid {hero_border}; background:{hero_bg}; border-radius:14px; padding:18px 18px;">
-            <div style="font-size:20px; font-weight:700; margin-bottom:6px;">{decision_headline}</div>
-            <div style="font-size:14px; margin-bottom:10px;">{decision_sentence}</div>
-            <div style="font-size:14px; font-weight:600;">{decision_action}</div>
+        <div style="border:1px solid {hero_border}; background:{hero_bg}; border-radius:16px; padding:22px 22px;">
+            <div style="font-size:20px; font-weight:700; margin-bottom:10px;">{decision_headline}</div>
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:10px;">
+                <div>
+                    <div style="font-size:12px; opacity:0.75; margin-bottom:4px;">Recommended fee</div>
+                    <div style="font-size:34px; font-weight:800; line-height:1;">{_currency_symbol(client_currency)}{recommended_fee_client:,.0f}</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:12px; opacity:0.75; margin-bottom:6px;">Confidence</div>
+                    <div style="display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid {hero_border}; font-weight:700;">{confidence}</div>
+                </div>
+            </div>
+            <div style="font-size:14px;">{decision_sentence}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.subheader("Justification")
-    j1, j2, j3 = st.columns(3)
-    j1.metric("Expected Views", f"{int(expected_views):,}")
-    j2.metric("Target CPM", f"{_currency_symbol(client_currency)}{target_cpm:,.2f}")
-    j3.metric(
-        "Recommended vs Quoted",
-        f"{_currency_symbol(client_currency)}{recommended_fee_client:,.0f} vs {_currency_symbol(client_currency)}{client_cost:,.0f}",
-        f"{fee_delta_pct:+.0f}%",
-        help="Comparison is quoted fee relative to recommended fee.",
-    )
+    with st.expander("Justification", expanded=False):
+        j1, j2, j3 = st.columns(3)
+        j1.metric("Expected views", f"{int(expected_views):,}")
+        j2.metric("Target CPM", f"{_currency_symbol(client_currency)}{target_cpm:,.2f}")
+        j3.metric("Quoted fee", f"{_currency_symbol(client_currency)}{client_cost:,.0f}")
 
-    st.write(
-        f"Recommended fee formula: (target CPM / 1000) × expected views = ({target_cpm:,.2f} / 1000) × {int(expected_views):,} "
-        f"= {_currency_symbol(client_currency)}{recommended_fee_client:,.2f}."
-    )
+        st.write(
+            f"Recommended fee = (target CPM / 1000) × expected views = ({target_cpm:,.2f} / 1000) × {int(expected_views):,} "
+            f"= {_currency_symbol(client_currency)}{recommended_fee_client:,.2f}."
+        )
+        st.write(f"Difference vs quoted: {fee_delta_pct:+.0f}%")
 
-    st.subheader("Context")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Creator Region", creator_region)
-    c2.metric("Client Currency", client_currency)
-    c3.metric(
-        "Exchange Rate",
-        f"1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}",
-    )
+    with st.expander("Context", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Region", creator_region)
+        c2.metric("Client currency", client_currency)
+        c3.metric("Exchange rate", f"1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}")
 
     with st.expander("Assumptions / Benchmarks", expanded=False):
         st.write("Region CPM benchmark (placeholder, editable in code):")
@@ -248,7 +255,9 @@ if run and creator_url:
         st.write("Exchange rates (in-code mapping, editable):")
         st.write(EXCHANGE_RATES_TO_USD)
 
-    with st.expander("Details (optional)", expanded=False):
+    st.stop()
+
+    with st.expander("Raw data (optional)", expanded=False):
         # ---------------- SUMMARY ----------------
         st.subheader(f"{channel['channel_name']} • {creator_tier} • {creator_region}")
         c1, c2, c3, c4 = st.columns(4)
@@ -284,64 +293,64 @@ if run and creator_url:
         # ---------------- AVRG vs MEDIAN VIEWS & VOLATILITY ----------------
         st.subheader("Average vs Median Views Comparison")
 
-    col1, col2, col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
 
-    col1.metric(
-        "Average Views",
-        f"{report['mean_views']:,}",
-        help="Average views across recent uploads. Can be inflated by viral videos."
-    )
-
-    col2.metric(
-        "Median Views",
-        f"{report['median_views']:,}",
-        help="Typical views per video. More reliable indicator of baseline performance."
-    )
-
-    col3.metric(
-        "Volatility & Risk",
-        report["risk_level"],
-        help=f"Volatility Ratio: {report['volatility_ratio']} (Higher = less predictable)"
-    )
-
-    avg_med_df = pd.DataFrame({
-        "Metric": ["Average Views", "Median Views"],
-        "Views": [report["mean_views"], report["median_views"]]
-    })
-
-    avg_med_chart = (
-        alt.Chart(avg_med_df)
-        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
-        .encode(
-            x=alt.X("Metric:N", title=None),
-            y=alt.Y(
-                "Views:Q",
-                title="Views",
-                scale=alt.Scale(domain=[0, max(avg_med_df["Views"]) * 1.2])  # 🔒 lock scale
-            ),
-            color=alt.Color(
-                "Metric:N",
-                scale=alt.Scale(
-                    domain=["Average Views", "Median Views"],
-                    range=["#4F81BD", "#C0504D"]  # blue vs red
-                ),
-                legend=None
-            ),
-            tooltip=[
-                alt.Tooltip("Metric:N"),
-                alt.Tooltip("Views:Q", format=",")
-            ]
+        col1.metric(
+            "Average Views",
+            f"{report['mean_views']:,}",
+            help="Average views across recent uploads. Can be inflated by viral videos."
         )
-        .properties(height=300)
-    )
 
-    st.altair_chart(avg_med_chart, use_container_width=True)
+        col2.metric(
+            "Median Views",
+            f"{report['median_views']:,}",
+            help="Typical views per video. More reliable indicator of baseline performance."
+        )
 
-    st.caption(
-        "Average views can be inflated by viral outliers, while median views reflect typical performance. "
-        "A large gap suggests volatility."
-        "Brands typically value creators with strong median performance."
-    )
+        col3.metric(
+            "Volatility & Risk",
+            report["risk_level"],
+            help=f"Volatility Ratio: {report['volatility_ratio']} (Higher = less predictable)"
+        )
+
+        avg_med_df = pd.DataFrame({
+            "Metric": ["Average Views", "Median Views"],
+            "Views": [report["mean_views"], report["median_views"]]
+        })
+
+        avg_med_chart = (
+            alt.Chart(avg_med_df)
+            .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+            .encode(
+                x=alt.X("Metric:N", title=None),
+                y=alt.Y(
+                    "Views:Q",
+                    title="Views",
+                    scale=alt.Scale(domain=[0, max(avg_med_df["Views"]) * 1.2])  # 🔒 lock scale
+                ),
+                color=alt.Color(
+                    "Metric:N",
+                    scale=alt.Scale(
+                        domain=["Average Views", "Median Views"],
+                        range=["#4F81BD", "#C0504D"]  # blue vs red
+                    ),
+                    legend=None
+                ),
+                tooltip=[
+                    alt.Tooltip("Metric:N"),
+                    alt.Tooltip("Views:Q", format=",")
+                ]
+            )
+            .properties(height=300)
+        )
+
+        st.altair_chart(avg_med_chart, use_container_width=True)
+
+        st.caption(
+            "Average views can be inflated by viral outliers, while median views reflect typical performance. "
+            "A large gap suggests volatility."
+            "Brands typically value creators with strong median performance."
+        )
 
     # st.subheader("View Performance Summary")
 
@@ -1089,6 +1098,12 @@ if run and creator_url:
 
 # else:
 #     st.info("Enter a YouTube channel and campaign details to begin.")
+
+
+
+
+
+
 
 
 
