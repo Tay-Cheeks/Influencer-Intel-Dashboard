@@ -53,6 +53,27 @@ def _value_verdict(quoted_fee: float, recommended_fee: float) -> str:
         return "Great value"
     return "Fair"
 
+
+def _render_card_open(primary: bool = False) -> None:
+    klass = "card card--primary" if primary else "card"
+    st.markdown(f'<div class="{klass}">', unsafe_allow_html=True)
+
+
+def _render_card_close() -> None:
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_metric_card(label: str, value: str) -> None:
+    st.markdown(
+        f"""
+        <div class="metric-card">
+            <div class="label">{label}</div>
+            <div class="value">{value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # ---------------- THEME TOGGLE ----------------
 # theme = st.sidebar.radio("Theme", ["Light", "Dark"])
 # if theme == "Dark":
@@ -68,6 +89,28 @@ def _value_verdict(quoted_fee: float, recommended_fee: float) -> str:
 st.set_page_config(page_title="Influencer Intel Dashboard", layout="wide")
 st.title("Influencer Intel Dashboard")
 st.caption("Performance • Engagement • Monetisation")
+
+st.markdown(
+    """
+    <style>
+      [data-testid="stAppViewContainer"] { background: #F7F8FA; }
+      .block-container { max-width: 1000px; padding-top: 2.0rem; padding-bottom: 3.0rem; }
+      .card { background: #FFFFFF; border: 1px solid rgba(17,24,39,0.08); border-radius: 16px; padding: 18px 18px; margin-top: 16px; }
+      .card--primary { padding: 22px 22px; }
+      .h2 { font-size: 16px; font-weight: 700; margin: 0 0 10px 0; color: #111827; }
+      .muted { color: #6B7280; }
+      .badge { display:inline-block; padding: 6px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+      .badge--pos { background: rgba(22,163,74,0.10); color: #166534; }
+      .badge--neg { background: rgba(220,38,38,0.10); color: #991B1B; }
+      .badge--neu { background: rgba(37,99,235,0.10); color: #1D4ED8; }
+      .label { font-size: 12px; color: #6B7280; margin-bottom: 4px; }
+      .hero { font-size: 36px; font-weight: 800; line-height: 1.05; color: #111827; margin: 0; }
+      .metric-card { background: #FFFFFF; border: 1px solid rgba(17,24,39,0.08); border-radius: 14px; padding: 14px 14px; }
+      .metric-card .value { font-size: 16px; font-weight: 700; color: #111827; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ---------------- INPUTS ----------------
 with st.sidebar:
@@ -199,32 +242,36 @@ if run and creator_url:
         hero_border = "#3B82F6"
         hero_bg = "#EFF6FF"
 
+    badge_class = "badge--neu"
+    if value_verdict == "Overpriced":
+        badge_class = "badge--neg"
+    elif value_verdict == "Great value":
+        badge_class = "badge--pos"
+
+    _render_card_open(primary=True)
     st.markdown(
         f"""
-        <div style="border:1px solid {hero_border}; background:{hero_bg}; border-radius:16px; padding:22px 22px;">
-            <div style="font-size:20px; font-weight:700; margin-bottom:10px;">{decision_headline}</div>
-            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:10px;">
-                <div>
-                    <div style="font-size:12px; opacity:0.75; margin-bottom:4px;">Recommended fee</div>
-                    <div style="font-size:34px; font-weight:800; line-height:1;">{_currency_symbol(client_currency)}{recommended_fee_client:,.0f}</div>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-size:12px; opacity:0.75; margin-bottom:6px;">Confidence</div>
-                    <div style="display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid {hero_border}; font-weight:700;">{confidence}</div>
-                </div>
-            </div>
-            <div style="font-size:14px;">{decision_sentence}</div>
-        </div>
+        <div class="h2"><span class="badge {badge_class}">{value_verdict}</span></div>
+        <div class="label">Recommended fee</div>
+        <div class="hero">{_currency_symbol(client_currency)}{recommended_fee_client:,.0f}</div>
+        <div style="margin-top:10px" class="muted">Confidence: <b>{confidence}</b></div>
+        <div style="margin-top:8px" class="muted">{decision_sentence}</div>
         """,
         unsafe_allow_html=True,
     )
+    _render_card_close()
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _render_metric_card("Expected views", f"{int(expected_views):,}")
+    with c2:
+        _render_metric_card("Target CPM", f"{_currency_symbol(client_currency)}{target_cpm:,.2f}")
+    with c3:
+        _render_metric_card("Quoted fee", f"{_currency_symbol(client_currency)}{client_cost:,.0f}")
+    with c4:
+        _render_metric_card("Recommended fee", f"{_currency_symbol(client_currency)}{recommended_fee_client:,.0f}")
 
     with st.expander("Justification", expanded=False):
-        j1, j2, j3 = st.columns(3)
-        j1.metric("Expected views", f"{int(expected_views):,}")
-        j2.metric("Target CPM", f"{_currency_symbol(client_currency)}{target_cpm:,.2f}")
-        j3.metric("Quoted fee", f"{_currency_symbol(client_currency)}{client_cost:,.0f}")
-
         st.write(
             f"Recommended fee = (target CPM / 1000) × expected views = ({target_cpm:,.2f} / 1000) × {int(expected_views):,} "
             f"= {_currency_symbol(client_currency)}{recommended_fee_client:,.2f}."
@@ -232,10 +279,10 @@ if run and creator_url:
         st.write(f"Difference vs quoted: {fee_delta_pct:+.0f}%")
 
     with st.expander("Context", expanded=False):
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Region", creator_region)
-        c2.metric("Client currency", client_currency)
-        c3.metric("Exchange rate", f"1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}")
+        st.write(
+            f"Region: {creator_region}. Client currency: {client_currency}. "
+            f"Exchange rate used: 1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}."
+        )
 
     with st.expander("Assumptions / Benchmarks", expanded=False):
         st.write("Region CPM benchmark (placeholder, editable in code):")
