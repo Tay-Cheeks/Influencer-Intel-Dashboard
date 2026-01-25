@@ -164,75 +164,125 @@ if run and creator_url:
     quoted_fee_creator = _convert_currency(client_cost, client_currency, creator_currency)
     value_verdict = _value_verdict(client_cost, recommended_fee_client)
 
-    st.header("Summary")
-    s1, s2, s3, s4, s5 = st.columns(5)
-    s1.metric("Target CPM", f"{_currency_symbol(client_currency)}{target_cpm:,.2f}")
-    s2.metric("Expected Views", f"{int(expected_views):,}")
-    s3.metric(
-        "Recommended Fee",
-        f"{_currency_symbol(client_currency)}{recommended_fee_client:,.2f}",
-        help=f"Also { _currency_symbol(creator_currency) }{recommended_fee_creator:,.2f} @ 1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}",
-    )
-    s4.metric(
-        "Quoted Fee",
-        f"{_currency_symbol(client_currency)}{client_cost:,.2f}",
-        help=f"Also { _currency_symbol(creator_currency) }{quoted_fee_creator:,.2f} @ 1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}",
-    )
-    s5.metric("Verdict", value_verdict)
+    fee_delta = client_cost - recommended_fee_client
+    fee_delta_pct = (fee_delta / recommended_fee_client) * 100 if recommended_fee_client else 0
+    if value_verdict == "Overpriced":
+        decision_headline = "Verdict: Overpriced for this campaign"
+        decision_action = "Recommended action: Negotiate down or choose a different creator."
+        decision_sentence = (
+            f"Based on {expected_views_method.lower()} ({int(expected_views):,}) and a target CPM of "
+            f"{_currency_symbol(client_currency)}{target_cpm:,.2f}, the quoted fee is above the recommended fee."
+        )
+        hero_border = "#EF4444"
+        hero_bg = "#FEF2F2"
+    elif value_verdict == "Great value":
+        decision_headline = "Verdict: Great value for this campaign"
+        decision_action = "Recommended action: Proceed (value is strong)."
+        decision_sentence = (
+            f"Based on {expected_views_method.lower()} ({int(expected_views):,}) and a target CPM of "
+            f"{_currency_symbol(client_currency)}{target_cpm:,.2f}, the quoted fee is below the recommended fee."
+        )
+        hero_border = "#22C55E"
+        hero_bg = "#F0FDF4"
+    else:
+        decision_headline = "Verdict: Fairly priced for this campaign"
+        decision_action = "Recommended action: Proceed if the creator fit is right."
+        decision_sentence = (
+            f"Based on {expected_views_method.lower()} ({int(expected_views):,}) and a target CPM of "
+            f"{_currency_symbol(client_currency)}{target_cpm:,.2f}, the quoted fee is close to the recommended fee."
+        )
+        hero_border = "#3B82F6"
+        hero_bg = "#EFF6FF"
 
-    st.subheader("Breakdown")
+    st.markdown(
+        f"""
+        <div style="border:1px solid {hero_border}; background:{hero_bg}; border-radius:14px; padding:18px 18px;">
+            <div style="font-size:20px; font-weight:700; margin-bottom:6px;">{decision_headline}</div>
+            <div style="font-size:14px; margin-bottom:10px;">{decision_sentence}</div>
+            <div style="font-size:14px; font-weight:600;">{decision_action}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.subheader("Justification")
+    j1, j2, j3 = st.columns(3)
+    j1.metric("Expected Views", f"{int(expected_views):,}")
+    j2.metric("Target CPM", f"{_currency_symbol(client_currency)}{target_cpm:,.2f}")
+    j3.metric(
+        "Recommended vs Quoted",
+        f"{_currency_symbol(client_currency)}{recommended_fee_client:,.0f} vs {_currency_symbol(client_currency)}{client_cost:,.0f}",
+        f"{fee_delta_pct:+.0f}%",
+        help="Comparison is quoted fee relative to recommended fee.",
+    )
+
     st.write(
-        f"Creator region: {creator_region}. Expected views uses {expected_views_method.lower()} ({int(expected_views):,}). "
-        f"Recommended fee = (target CPM / 1000) × expected views = ({target_cpm:,.2f} / 1000) × {int(expected_views):,} "
-        f"= {_currency_symbol(client_currency)}{recommended_fee_client:,.2f} ({client_currency})."
+        f"Recommended fee formula: (target CPM / 1000) × expected views = ({target_cpm:,.2f} / 1000) × {int(expected_views):,} "
+        f"= {_currency_symbol(client_currency)}{recommended_fee_client:,.2f}."
     )
 
-    with st.expander("Assumptions / Benchmarks"):
+    st.subheader("Context")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Creator Region", creator_region)
+    c2.metric("Client Currency", client_currency)
+    c3.metric(
+        "Exchange Rate",
+        f"1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}",
+    )
+
+    with st.expander("Assumptions / Benchmarks", expanded=False):
         st.write("Region CPM benchmark (placeholder, editable in code):")
         st.write(
             f"{creator_region}: ${benchmark_low_usd:,.2f}–${benchmark_high_usd:,.2f} USD CPM "
             f"(midpoint used for default target CPM: ${benchmark_mid_usd:,.2f} USD)."
         )
+        st.write("Fees shown in both currencies:")
+        st.write(
+            f"Recommended: {_currency_symbol(client_currency)}{recommended_fee_client:,.2f} ({client_currency}) / "
+            f"{_currency_symbol(creator_currency)}{recommended_fee_creator:,.2f} ({creator_currency})"
+        )
+        st.write(
+            f"Quoted: {_currency_symbol(client_currency)}{client_cost:,.2f} ({client_currency}) / "
+            f"{_currency_symbol(creator_currency)}{quoted_fee_creator:,.2f} ({creator_currency})"
+        )
         st.write("Exchange rates (in-code mapping, editable):")
         st.write(EXCHANGE_RATES_TO_USD)
-        st.write(
-            f"Rate used: 1 {client_currency} = {exchange_rate_client_to_creator:.4f} {creator_currency}"
-        )
 
-    # ---------------- SUMMARY ----------------
-    st.subheader(f"{channel['channel_name']} • {creator_tier} • {creator_region}")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Subscribers", f"{channel['subscribers']:,}")
-    c2.metric("Mean Views", f"{report['mean_views']:,}")
-    c3.metric("Median Views", f"{report['median_views']:,}")
-    c4.metric("Dashboard Score", metrics.dashboard_score, metrics.dashboard_interpretation, help="Dashboard Score (0–100) is a composite performance index designed to give a quick, decision-ready view of a creator’s overall quality.")
+    with st.expander("Details (optional)", expanded=False):
+        # ---------------- SUMMARY ----------------
+        st.subheader(f"{channel['channel_name']} • {creator_tier} • {creator_region}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Subscribers", f"{channel['subscribers']:,}")
+        c2.metric("Mean Views", f"{report['mean_views']:,}")
+        c3.metric("Median Views", f"{report['median_views']:,}")
+        c4.metric("Dashboard Score", metrics.dashboard_score, metrics.dashboard_interpretation, help="Dashboard Score (0–100) is a composite performance index designed to give a quick, decision-ready view of a creator’s overall quality.")
 
-    # ---------------- DASHBOARD SCORE EXPLANATION ------------
-    with st.expander("What is the Dashboard Score?"):
-        st.markdown(
-            """
-            **Dashboard Score (0–100)** is a composite performance index designed to give a 
-            quick, decision-ready view of a creator’s overall quality.
+        # ---------------- DASHBOARD SCORE EXPLANATION ------------
+        with st.expander("What is the Dashboard Score?"):
+            st.markdown(
+                """
+                **Dashboard Score (0–100)** is a composite performance index designed to give a 
+                quick, decision-ready view of a creator’s overall quality.
 
-            It combines:
-            
-            • Engagement rate vs industry benchmarks  
-            • Audience loyalty (views-to-subscriber ratio)  
-            • Engagement consistency (volatility control)  
-            • Content risk profile (viral vs stable performance)
+                It combines:
+                
+                • Engagement rate vs industry benchmarks  
+                • Audience loyalty (views-to-subscriber ratio)  
+                • Engagement consistency (volatility control)  
+                • Content risk profile (viral vs stable performance)
 
-            **Higher scores indicate creators who are more reliable, brand-safe, and commercially scalable.**
-            """
-        )
+                **Higher scores indicate creators who are more reliable, brand-safe, and commercially scalable.**
+                """
+            )
 
 
-    # ---------------- DATA ----------------
-    df = pd.DataFrame(videos)
-    df["published_date"] = pd.to_datetime(df["publishedAt"])
-    df["engagement"] = df["likes"] + df["comments"]
+        # ---------------- DATA ----------------
+        df = pd.DataFrame(videos)
+        df["published_date"] = pd.to_datetime(df["publishedAt"])
+        df["engagement"] = df["likes"] + df["comments"]
 
-    # ---------------- AVRG vs MEDIAN VIEWS & VOLATILITY ----------------
-    st.subheader("Average vs Median Views Comparison")
+        # ---------------- AVRG vs MEDIAN VIEWS & VOLATILITY ----------------
+        st.subheader("Average vs Median Views Comparison")
 
     col1, col2, col3 = st.columns(3)
 
