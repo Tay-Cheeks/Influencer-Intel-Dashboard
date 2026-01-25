@@ -255,8 +255,6 @@ if run and creator_url:
         st.write("Exchange rates (in-code mapping, editable):")
         st.write(EXCHANGE_RATES_TO_USD)
 
-    st.stop()
-
     with st.expander("Raw data (optional)", expanded=False):
         # ---------------- SUMMARY ----------------
         st.subheader(f"{channel['channel_name']} • {creator_tier} • {creator_region}")
@@ -1098,12 +1096,6 @@ if run and creator_url:
 
 # else:
 #     st.info("Enter a YouTube channel and campaign details to begin.")
-
-
-
-
-
-
 
 
 
