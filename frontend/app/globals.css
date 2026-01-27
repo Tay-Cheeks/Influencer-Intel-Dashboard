@@ -24,3 +24,38 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F4F6F8;
+  --fg: #0E1114;
+
+  --card: #FFFFFF;
+  --muted: rgba(14, 17, 20, 0.06);
+  --border: rgba(14, 17, 20, 0.12);
+
+  --primary: #7E8FC9;
+  --secondary: #9AA3B2;
+  --accent: #D8BC8A;
+}
+
+.dark {
+  --bg: #0E1114;
+  --fg: #E6EAF0;
+
+  --card: rgba(230, 234, 240, 0.05);
+  --muted: rgba(230, 234, 240, 0.08);
+  --border: rgba(230, 234, 240, 0.12);
+
+  --primary: #7E8FC9;
+  --secondary: #9AA3B2;
+  --accent: #D8BC8A;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
