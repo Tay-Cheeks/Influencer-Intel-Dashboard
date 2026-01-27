@@ -37,7 +37,6 @@ export default function RootLayout({
 // import { Geist, Geist_Mono } from "next/font/google";
 // import "./globals.css";
 
-// import Sidebar from "@/components/Sidebar";
 // import ThemeProvider from "@/components/ThemeProvider";
 
 // const geistSans = Geist({
@@ -63,15 +62,7 @@ export default function RootLayout({
 //       <body
 //         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 //       >
-//         <ThemeProvider>
-//           <div
-//             className="flex min-h-screen"
-//             style={{ background: "var(--bg)", color: "var(--fg)" }}
-//           >
-//             <Sidebar />
-//             <main className="flex-1 p-6">{children}</main>
-//           </div>
-//         </ThemeProvider>
+//         <ThemeProvider>{children}</ThemeProvider>
 //       </body>
 //     </html>
 //   );
