@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { useAnalysis } from "@/context/AnalysisContext";
+import { useSession, signOut } from "next-auth/react";
+import { LogOut, User } from "lucide-react";
 
 const nav = [
   { href: "/app/analyse", label: "Analyse" },
@@ -253,22 +255,62 @@ export default function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="mt-auto pt-4">
-        <div
+      <div className="mt-auto pt-4 space-y-3">
+        {/* User Info */}
+        {!collapsed && (
+          <div
+            className="rounded-xl p-3 text-xs"
+            style={{
+              border:
+                "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+              background: "color-mix(in srgb, var(--muted) 55%, transparent)",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <User size={14} className="opacity-70" />
+              <span className="font-medium opacity-80">
+                {useSession().data?.user?.name || "User"}
+              </span>
+            </div>
+            <div className="opacity-60 truncate">
+              {useSession().data?.user?.email || ""}
+            </div>
+          </div>
+        )}
+
+        {/* Logout Button */}
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
           className={cn(
-            "rounded-xl p-3 text-xs opacity-70",
-            collapsed && "hidden",
+            "w-full rounded-xl px-3 py-2 text-xs transition hover:opacity-90",
+            collapsed && "px-2",
           )}
           style={{
-            border:
-              "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+            border: "1px solid var(--border)",
             background: "color-mix(in srgb, var(--muted) 55%, transparent)",
-            backdropFilter: "blur(12px)",
           }}
         >
-          Public pages: Home / Pricing / Tutorial <br />
-          App pages: /app/*
-        </div>
+          <div className="flex items-center gap-2 justify-center">
+            <LogOut size={14} />
+            {!collapsed && <span>Sign out</span>}
+          </div>
+        </button>
+
+        {!collapsed && (
+          <div
+            className="rounded-xl p-3 text-xs opacity-70"
+            style={{
+              border:
+                "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
+              background: "color-mix(in srgb, var(--muted) 55%, transparent)",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            Public pages: Home / Pricing / Tutorial <br />
+            App pages: /app/*
+          </div>
+        )}
       </div>
     </aside>
   );
